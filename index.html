@@ -1133,13 +1133,15 @@ function tabRepuestos(m){
   return `
     <div class="card">
       <div class="hd"><h2>Repuestos y consumibles</h2><span class="sub">${ps.length}</span><div style="flex:1"></div>
-        ${RO()?"":`<button class="btn" data-addpart>${ICON.plus} Añadir</button>`}</div>
+        ${RO()?"":`<button class="btn" data-addpart>${ICON.plus} Añadir</button>`}
+        ${(RO()||!ps.length)?"":`<button class="btn primary" data-savepart>Guardar stock</button>`}</div>
       ${ps.length?`<div class="tablewrap"><table>
         <thead><tr><th style="width:60px">Nivel</th><th>Descripción</th><th class="num">Stock</th><th class="num">Mínimo</th><th>Proveedor</th><th class="num">Plazo</th><th>Estado</th><th style="width:40px"></th></tr></thead>
         <tbody>${ps.map((p,i)=>`<tr>
           <td><span class="pill ${p.ref==="P0"?"crit":p.ref==="P1"?"warn":"neut"}"><i></i>${esc(p.ref)}</span></td>
           <td><b>${esc(p.name)}</b>${p.nota?`<div class="sub" style="font-size:12.5px">${esc(p.nota)}</div>`:""}</td>
-          <td class="num">${p.stock}</td><td class="num">${p.min}</td>
+          <td class="num">${RO()?p.stock:`<input type="number" data-pf="${i}|stock" value="${p.stock}" min="0" style="width:70px;text-align:right;padding:5px 7px">`}</td>
+          <td class="num">${RO()?p.min:`<input type="number" data-pf="${i}|min" value="${p.min}" min="0" style="width:70px;text-align:right;padding:5px 7px">`}</td>
           <td class="sub">${esc(p.prov||"—")}</td><td class="num">${p.plazo||0} d</td>
           <td>${p.stock===0?'<span class="pill crit"><i></i>Sin stock</span>':p.stock<p.min?'<span class="pill warn"><i></i>Bajo mínimo</span>':'<span class="pill ok"><i></i>Correcto</span>'}</td>
           <td>${RO()?"":`<button class="btn ghost" data-delpart="${i}" style="padding:2px 7px">✕</button>`}</td>
@@ -1213,25 +1215,97 @@ function tabLib(m){
       </tr>`).join("")}</tbody></table></div></div>`;
 }
 
-/* ══════════════ VISTA · REPUESTOS GLOBAL ══════════════ */
+/* ══════════════ VISTA · REPUESTOS ══════════════ */
+const normRep = (s) => String(s||"").toLowerCase().trim().replace(/\s+/g," ");
+function mapaCompartidos(){
+  const m = {};
+  DB.maquinas.forEach(mq => (mq.repuestos||[]).forEach(p => {
+    const k = normRep(p.name);
+    (m[k] = m[k] || []).push(mq.id);
+  }));
+  return m;
+}
+function estadoRep(p){
+  return p.stock===0 ? '<span class="pill crit"><i></i>Sin stock</span>'
+       : p.stock < p.min ? '<span class="pill warn"><i></i>Bajo mínimo</span>'
+       : '<span class="pill ok"><i></i>Correcto</span>';
+}
+function nivelPill(ref){
+  return `<span class="pill ${ref==="P0"?"crit":ref==="P1"?"warn":"neut"}"><i></i>${esc(ref)}</span>`;
+}
+
 function viewRepuestos(){
-  const all = [];
-  DB.maquinas.forEach(m => (m.repuestos||[]).forEach(p => all.push({m,p})));
-  const bajo = all.filter(x => x.p.stock < x.p.min);
+  const comp = mapaCompartidos();
+  const conRep = DB.maquinas.filter(m => (m.repuestos||[]).length);
+  const sinRep = DB.maquinas.filter(m => !(m.repuestos||[]).length);
+  const todos = [];
+  DB.maquinas.forEach(m => (m.repuestos||[]).forEach(p => todos.push({m,p})));
+  const bajo = todos.filter(x => x.p.stock < x.p.min);
+  const sinStock = todos.filter(x => x.p.stock === 0);
+  const p0 = todos.filter(x => x.p.ref === "P0" && x.p.stock < x.p.min);
+  const plazoLargo = todos.filter(x => (+x.p.plazo||0) >= 21 && x.p.stock < x.p.min);
+  const refsUnicas = Object.keys(comp).length;
+
+  const kpi = (k,v,u,d,cls="") => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}${u?`<small> ${u}</small>`:""}</div>${d?`<div class="d ${cls}">${d}</div>`:""}</div>`;
+
+  const bloque = (m) => {
+    const ps = (m.repuestos||[]).slice().sort((x,y)=> (x.ref>y.ref?1:x.ref<y.ref?-1:0) || (x.stock<x.min?-1:1));
+    const b = ps.filter(p=>p.stock<p.min).length;
+    return `<div class="card" style="margin-bottom:14px">
+      <div class="hd">
+        <span class="code">${esc(m.id)}</span>${critPill(m.crit)}
+        <h2>${esc(m.nombre)}</h2>
+        <div style="flex:1"></div>
+        <span class="sub">${ps.length} ${ps.length===1?"referencia":"referencias"}</span>
+        ${b?`<span class="pill crit"><i></i>${b} bajo mínimo</span>`:'<span class="pill ok"><i></i>Al día</span>'}
+        ${RO()?"":`<button class="btn ghost" data-irmaq="${esc(m.id)}" style="padding:4px 10px">Abrir ficha</button>`}
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th style="width:58px">Nivel</th><th>Repuesto</th><th class="num">Stock</th><th class="num">Mín.</th><th>Proveedor</th><th class="num">Plazo</th><th style="width:130px">Estado</th></tr></thead>
+        <tbody>${ps.map(p=>{
+          const otras = (comp[normRep(p.name)]||[]).filter(id=>id!==m.id);
+          return `<tr>
+            <td>${nivelPill(p.ref)}</td>
+            <td><b>${esc(p.name)}</b>
+              ${otras.length?`<div class="sub" style="font-size:12px">También en ${esc(otras.join(", "))}</div>`:""}
+              ${p.nota?`<div class="sub" style="font-size:12px">${esc(p.nota)}</div>`:""}</td>
+            <td class="num" style="${p.stock===0?"color:var(--crit-ink);font-weight:600":""}">${p.stock}</td>
+            <td class="num">${p.min}</td>
+            <td class="sub">${esc(p.prov||"—")}</td>
+            <td class="num" style="${(+p.plazo||0)>=21?"color:var(--warn-ink)":""}">${p.plazo||0} d</td>
+            <td>${estadoRep(p)}</td>
+          </tr>`;}).join("")}</tbody>
+      </table></div>
+    </div>`;
+  };
+
   return `<div class="wrap">
-    <div class="pagehead"><div><p class="eyebrow">Almacén</p><h1>Repuestos</h1>
-      <p class="sub">${all.length} referencias en ${DB.maquinas.length} máquinas</p></div></div>
-    ${bajo.length?`<div class="note warn" style="margin-bottom:16px">${ICON.warn}<div><b>${bajo.length} referencias por debajo del mínimo.</b> Sin repuesto, las piezas sacrificiales se usan más allá de su límite hasta transmitir el desgaste a componentes caros.</div></div>`:""}
-    ${all.length?`<div class="card"><div class="tablewrap"><table>
-      <thead><tr><th style="width:60px">Nivel</th><th>Máquina</th><th>Descripción</th><th class="num">Stock</th><th class="num">Mín.</th><th>Proveedor</th><th class="num">Plazo</th><th>Estado</th></tr></thead>
-      <tbody>${all.map(({m,p})=>`<tr>
-        <td><span class="pill ${p.ref==="P0"?"crit":p.ref==="P1"?"warn":"neut"}"><i></i>${esc(p.ref)}</span></td>
-        <td><span class="code">${esc(m.id)}</span></td>
-        <td><b>${esc(p.name)}</b>${p.nota?`<div class="sub" style="font-size:12.5px">${esc(p.nota)}</div>`:""}</td>
-        <td class="num">${p.stock}</td><td class="num">${p.min}</td><td class="sub">${esc(p.prov||"—")}</td><td class="num">${p.plazo||0} d</td>
-        <td>${p.stock===0?'<span class="pill crit"><i></i>Sin stock</span>':p.stock<p.min?'<span class="pill warn"><i></i>Bajo mínimo</span>':'<span class="pill ok"><i></i>Correcto</span>'}</td>
-      </tr>`).join("")}</tbody></table></div></div>`
-    :`<div class="card"><div class="emptystate"><h3>Sin repuestos registrados</h3><p>Los repuestos se añaden desde la ficha de cada máquina, en la pestaña Repuestos.</p></div></div>`}
+    <div class="pagehead"><div><p class="eyebrow">Almacén</p><h1>Repuestos por máquina</h1>
+      <p class="sub">${todos.length} referencias asociadas · ${refsUnicas} distintas · ${conRep.length} de ${DB.maquinas.length} máquinas con repuestos</p></div></div>
+
+    ${p0.length?`<div class="note warn" style="margin-bottom:12px">${ICON.warn}<div><b>${p0.length} ${p0.length===1?"repuesto crítico (P0) por debajo del mínimo":"repuestos críticos (P0) por debajo del mínimo"}.</b> Son los que bloquean una reparación: ${esc(p0.map(x=>x.m.id+" · "+x.p.name).join(" / "))}.</div></div>`:""}
+    ${plazoLargo.length?`<div class="note warn" style="margin-bottom:12px">${ICON.warn}<div><b>${plazoLargo.length} ${plazoLargo.length===1?"referencia":"referencias"} con más de 3 semanas de plazo y sin stock suficiente.</b> Con esos plazos hay que tenerlas en la estantería aunque se usen una vez al año.</div></div>`:""}
+
+    <div class="kpis">
+      ${kpi("Referencias asociadas", todos.length, "", `${refsUnicas} distintas`)}
+      ${kpi("Bajo mínimo", bajo.length, "", bajo.length?"Reponer":"Stock correcto", bajo.length?"down":"up")}
+      ${kpi("Sin stock", sinStock.length, "", sinStock.length?"Riesgo inmediato":"Ninguna", sinStock.length?"down":"up")}
+      ${kpi("Máquinas sin repuestos", sinRep.length, "", sinRep.length?"Sin nada asociado todavía":"Todas cubiertas", sinRep.length?"down":"up")}
+    </div>
+
+    ${conRep.length ? conRep.map(bloque).join("")
+      : `<div class="card"><div class="emptystate"><h3>Todavía no hay repuestos asociados</h3>
+          <p>Los repuestos se añaden desde la ficha de cada máquina, en la pestaña Repuestos. Quedan asociados a esa máquina y aparecen aquí agrupados.</p></div></div>`}
+
+    ${sinRep.length?`<div class="card">
+      <div class="hd"><h2>Máquinas sin repuestos asociados</h2><div style="flex:1"></div><span class="sub">${sinRep.length}</span></div>
+      <div class="bd">
+        <div class="chiprow">${sinRep.map(m=>`<span class="chipdel" style="padding-right:11px"><span class="code">${esc(m.id)}</span> ${esc(m.nombre)}</span>`).join("")}</div>
+        <div class="note" style="margin-top:14px">${ICON.info}<div>Una máquina crítica sin ningún repuesto asociado es una avería esperando a pasar. Aunque solo apuntes dos o tres piezas y su plazo de entrega, ya sabrás qué te va a doler.</div></div>
+      </div>
+    </div>`:""}
+
+    <p class="footnote">Un mismo repuesto puede estar asociado a varias máquinas: se marca solo cuando coincide la descripción.</p>
   </div>`;
 }
 
@@ -1276,15 +1350,31 @@ function ultimosMeses(n){
   return out;
 }
 const enMes = (iso,mm) => { const p = parseISO(iso); return p && p.getFullYear()===mm.y && p.getMonth()===mm.m; };
+const desde = (dias) => addDays(today(), -dias);
+
 function serieCumplimiento(ms){
   return ms.map(mm => {
     const hs = DB.historial.filter(h => enMes(h.fecha, mm));
     return hs.length ? Math.round(hs.filter(h=>!h.tarde).length / hs.length * 100) : null;
   });
 }
-function serieParo(ms){
-  return ms.map(mm => DB.averias.filter(a => enMes(a.fecha, mm)).reduce((s,a)=>s+(+a.paro||0), 0));
+function serieParo(ms){ return ms.map(mm => DB.averias.filter(a => enMes(a.fecha, mm)).reduce((s,a)=>s+(+a.paro||0), 0)); }
+function serieAverias(ms){ return ms.map(mm => DB.averias.filter(a => enMes(a.fecha, mm)).length); }
+function seriePartes(ms){ return ms.map(mm => DB.historial.filter(h => enMes(h.fecha, mm)).length); }
+
+function averiasEn(dias){ const d0 = desde(dias); return DB.averias.filter(a => { const p = parseISO(a.fecha); return p && p >= d0; }); }
+function horasMarcha(dias){ return DB.maquinas.reduce((s,m) => s + (+((m.horas||{}).semana)||0) * (dias/7), 0); }
+function disponibilidad(dias){
+  const marcha = horasMarcha(dias); if(!marcha) return null;
+  const paro = averiasEn(dias).reduce((s,a)=>s+(+a.paro||0),0);
+  return Math.max(0, Math.round((marcha - paro)/marcha*1000)/10);
 }
+function mtbf(dias){
+  const n = averiasEn(dias).length, marcha = horasMarcha(dias);
+  return (!n || !marcha) ? null : marcha/n;
+}
+function mttr(){ const n = DB.averias.length; return n ? DB.averias.reduce((s,a)=>s+(+a.rep||0),0)/n : null; }
+
 function costePorMaquina(){
   const a = ajustes(), th = +a.tarifaHora||0, cp = +a.costeParoHora||0;
   return DB.maquinas.map(m => {
@@ -1294,38 +1384,62 @@ function costePorMaquina(){
     return {m, prev, corr, tot:prev+corr, nAv:av.length};
   }).filter(x=>x.tot>0).sort((x,y)=>y.tot-x.tot);
 }
+function cumplPorMaquina(){
+  return DB.maquinas.map(m => {
+    const hs = DB.historial.filter(h=>h.mid===m.id);
+    const ag = (m.tareas||[]).map(t=>estadoTarea(m,t));
+    return {m, n:hs.length, venc: ag.filter(e=>e.st==="vencida").length,
+            pct: hs.length ? Math.round(hs.filter(h=>!h.tarde).length/hs.length*100) : null};
+  }).filter(x=>x.n || (x.m.tareas||[]).length);
+}
+function paroPorMaquina(){
+  return DB.maquinas.map(m => {
+    const av = DB.averias.filter(a=>a.mid===m.id);
+    return {m, n:av.length, paro:av.reduce((s,a)=>s+(+a.paro||0),0), rep:av.reduce((s,a)=>s+(+a.rep||0),0)};
+  }).filter(x=>x.n).sort((a,b)=>b.paro-a.paro);
+}
+function ultimoParte(mid){
+  const hs = DB.historial.filter(h=>h.mid===mid).map(h=>parseISO(h.fecha)).filter(Boolean).sort((a,b)=>b-a);
+  return hs[0] || null;
+}
 
 /* ── Gráficos ── */
-function barras({labels, values, suffix="", alto=190}){
-  const W=560, pad={l:38,r:14,t:16,b:26}, iw=W-pad.l-pad.r, ih=alto-pad.t-pad.b;
+function niceMax(v){
+  if(!(v>0)) return 1;
+  const e = Math.pow(10, Math.floor(Math.log10(v))), n = v/e;
+  return (n<=1?1:n<=2?2:n<=5?5:10)*e;
+}
+function barras({labels, values, suffix="", alto=180, color="var(--s1)", entero=false}){
+  const W=560, pad={l:38,r:14,t:18,b:26}, iw=W-pad.l-pad.r, ih=alto-pad.t-pad.b;
   const reales = values.filter(v=>v!=null);
-  const max = Math.max(20, Math.ceil((Math.max.apply(null, reales.concat([0]))||100)/20)*20);
+  const max = niceMax(Math.max.apply(null, reales.concat([0])));
   const bw = iw/labels.length, bar = Math.min(30, bw*0.55);
   const last = values.reduce((k,v,i)=> v!=null ? i : k, -1);
-  return `<svg class="chart" viewBox="0 0 ${W} ${alto}" role="img" aria-label="Cumplimiento del plan por mes">
+  const fmt = v => entero ? nfmt(v) : nfmt(v, v%1?1:0);
+  return `<svg class="chart" viewBox="0 0 ${W} ${alto}" role="img" aria-label="Serie mensual">
     ${[0,max/2,max].map(t=>{const y=pad.t+ih-(t/max)*ih;
-      return `<line class="gl" x1="${pad.l}" x2="${W-pad.r}" y1="${y}" y2="${y}"/><text x="${pad.l-8}" y="${y+3.5}" text-anchor="end" class="val">${t}${suffix}</text>`;}).join("")}
+      return `<line class="gl" x1="${pad.l}" x2="${W-pad.r}" y1="${y}" y2="${y}"/><text x="${pad.l-8}" y="${y+3.5}" text-anchor="end" class="val">${fmt(t)}${suffix}</text>`;}).join("")}
     ${values.map((v,i)=>{
       const x = pad.l+i*bw+(bw-bar)/2;
-      if(v==null) return `<rect x="${x}" y="${pad.t+ih-3}" width="${bar}" height="3" rx="1.5" fill="var(--grid)"><title>${labels[i]}: sin partes</title></rect>`;
+      if(v==null) return `<rect x="${x}" y="${pad.t+ih-3}" width="${bar}" height="3" rx="1.5" fill="var(--grid)"><title>${labels[i]}: sin datos</title></rect>`;
       const h=(v/max)*ih, y=pad.t+ih-h, es=i===last;
-      return `<g><rect x="${x}" y="${y}" width="${bar}" height="${Math.max(h,2)}" rx="4" fill="${es?"var(--brand)":"var(--s1)"}"><title>${labels[i]}: ${v}${suffix}</title></rect>
-        ${es?`<text x="${x+bar/2}" y="${y-6}" text-anchor="middle" class="val" style="fill:var(--ink);font-weight:600">${v}${suffix}</text>`:""}</g>`;
+      return `<g><rect x="${x}" y="${y}" width="${bar}" height="${Math.max(h,2)}" rx="4" fill="${es?"var(--brand)":color}"><title>${labels[i]}: ${fmt(v)}${suffix}</title></rect>
+        ${es&&v>0?`<text x="${x+bar/2}" y="${y-6}" text-anchor="middle" class="val" style="fill:var(--ink);font-weight:600">${fmt(v)}${suffix}</text>`:""}</g>`;
     }).join("")}
     <line class="ax" x1="${pad.l}" x2="${W-pad.r}" y1="${pad.t+ih}" y2="${pad.t+ih}"/>
     ${labels.map((l,i)=>`<text x="${pad.l+i*bw+bw/2}" y="${alto-8}" text-anchor="middle">${l}</text>`).join("")}
   </svg>`;
 }
-function area({labels, values, suffix="", alto=190}){
-  const W=560, pad={l:40,r:16,t:16,b:26}, iw=W-pad.l-pad.r, ih=alto-pad.t-pad.b;
-  const max = Math.max(4, Math.ceil((Math.max.apply(null, values.concat([0]))||10)/4)*4);
+function area({labels, values, suffix="", alto=180}){
+  const W=560, pad={l:40,r:16,t:18,b:26}, iw=W-pad.l-pad.r, ih=alto-pad.t-pad.b;
+  const max = niceMax(Math.max.apply(null, values.concat([0])));
   const X = i => pad.l+(i/Math.max(1,values.length-1))*iw, Y = v => pad.t+ih-(v/max)*ih;
   const linea = values.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
   const relleno = `${linea} L${X(values.length-1).toFixed(1)},${pad.t+ih} L${X(0)},${pad.t+ih} Z`;
   const ult = values[values.length-1];
-  return `<svg class="chart" viewBox="0 0 ${W} ${alto}" role="img" aria-label="Horas de paro no programado por mes">
+  return `<svg class="chart" viewBox="0 0 ${W} ${alto}" role="img" aria-label="Serie mensual">
     ${[0,max/2,max].map(t=>{const y=Y(t);
-      return `<line class="gl" x1="${pad.l}" x2="${W-pad.r}" y1="${y}" y2="${y}"/><text x="${pad.l-8}" y="${y+3.5}" text-anchor="end" class="val">${nfmt(t)}</text>`;}).join("")}
+      return `<line class="gl" x1="${pad.l}" x2="${W-pad.r}" y1="${y}" y2="${y}"/><text x="${pad.l-8}" y="${y+3.5}" text-anchor="end" class="val">${nfmt(t, t%1?1:0)}</text>`;}).join("")}
     <path d="${relleno}" fill="var(--s2)" opacity=".14"/>
     <path d="${linea}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     ${values.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="${i===values.length-1?5:3.4}" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>${labels[i]}: ${nfmt(v,1)} ${suffix}</title></circle>`).join("")}
@@ -1334,57 +1448,100 @@ function area({labels, values, suffix="", alto=190}){
     ${labels.map((l,i)=>`<text x="${X(i)}" y="${alto-8}" text-anchor="middle">${l}</text>`).join("")}
   </svg>`;
 }
+function ranking(filas){
+  const max = Math.max.apply(null, filas.map(f=>f.v).concat([0])) || 1;
+  return `<div style="display:flex;flex-direction:column;gap:11px">${filas.map(f=>`
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;gap:10px">
+        <span style="min-width:0"><span class="code">${esc(f.id)}</span> <span style="color:var(--ink-2)">${esc(f.nombre)}</span>${f.extra?` <span class="sub">· ${esc(f.extra)}</span>`:""}</span>
+        <span class="mono" style="font-weight:600;white-space:nowrap">${esc(f.txt)}</span></div>
+      <div style="height:13px;border-radius:4px;overflow:hidden;background:var(--surface-2)">
+        <div style="width:${(f.v/max*100).toFixed(1)}%;height:100%;background:${f.color||"var(--s1)"}"></div></div>
+    </div>`).join("")}</div>`;
+}
 function panelVacio(titulo, texto){
-  return `<div class="emptystate" style="padding:34px 22px"><h3>${titulo}</h3><p>${texto}</p></div>`;
+  return `<div class="emptystate" style="padding:32px 22px"><h3>${titulo}</h3><p>${texto}</p></div>`;
 }
 
 /* ══════════════ VISTA · CUADRO DE MANDO ══════════════ */
 function viewCuadro(){
   const ms = ultimosMeses(8), labels = ms.map(x=>x.l[0].toUpperCase()+x.l.slice(1));
-  const cum = serieCumplimiento(ms), paro = serieParo(ms), costes = costePorMaquina();
-  const a = ajustes();
+  const cum = serieCumplimiento(ms), paro = serieParo(ms), nav = serieAverias(ms), npart = seriePartes(ms);
+  const costes = costePorMaquina(), a = ajustes();
 
-  const ag = agenda(), venc = ag.filter(x=>x.st==="vencida");
+  const ag = agenda(), venc = ag.filter(x=>x.st==="vencida"), hoy = ag.filter(x=>x.st==="hoy");
   const hist = DB.historial, enPlazo = hist.filter(h=>!h.tarde).length;
   const cumpl = hist.length ? Math.round(enPlazo/hist.length*100) : null;
+  const abiertas = DB.averias.filter(x=>x.abierta);
   const paroTot = DB.averias.reduce((s,x)=>s+(+x.paro||0),0);
-  const repTot  = DB.averias.reduce((s,x)=>s+(+x.rep||0),0);
-  const mttr = DB.averias.length ? repTot/DB.averias.length : null;
   const costeTot = costes.reduce((s,x)=>s+x.tot,0);
-  const pctCorr = costeTot ? Math.round(costes.reduce((s,x)=>s+x.corr,0)/costeTot*100) : null;
+  const corrTot = costes.reduce((s,x)=>s+x.corr,0);
+  const pctCorr = costeTot ? Math.round(corrTot/costeTot*100) : null;
+  const disp = disponibilidad(90), mtb = mtbf(90), mtr = mttr();
   const carga = DB.maquinas.reduce((s,m)=>s+cargaSemanal(m),0);
   const sinPlan = DB.maquinas.filter(m=>!(m.tareas||[]).length);
   const noLib = DB.maquinas.filter(m=>(m.liberacion||[]).some(l=>!l.ok));
   const bajo = DB.maquinas.reduce((s,m)=>s+(m.repuestos||[]).filter(p=>p.stock<p.min).length,0);
-  const provAbiertos = hist.filter(h=>h.prov).length;
+  const sinStock = DB.maquinas.reduce((s,m)=>s+(m.repuestos||[]).filter(p=>p.stock===0).length,0);
+  const prov = hist.filter(h=>h.prov).length;
+  const pendVB = hist.filter(h=>h.needVB && !h.vb).length;
+  const noConf = hist.reduce((s,h)=>s+(+h.noConf||0),0);
+  const horasPrev = hist.reduce((s,h)=>s+(+h.min||0),0)/60;
 
-  const kpi = (k,v,u,d,cls="") => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}${u?`<small> ${u}</small>`:""}</div>${d?`<div class="d ${cls}">${d}</div>`:""}</div>`;
+  const kpi = (k,v,u,d,cls="",nota="") => `<div class="kpi"><div class="k">${k}${nota?` <span class="mono" style="color:var(--ink-3)">${nota}</span>`:""}</div><div class="v">${v}${u?`<small> ${u}</small>`:""}</div>${d?`<div class="d ${cls}">${d}</div>`:""}</div>`;
 
   return `<div class="wrap">
     <div class="pagehead">
       <div><p class="eyebrow">${state.role==="direccion"?"Dirección · solo consulta":"Encargado de planta"}</p><h1>Cuadro de mando</h1>
-      <p class="sub">${fmtFull(today())}</p></div>
+      <p class="sub">${fmtFull(today())} · ${DB.maquinas.length} máquinas · ${hist.length} partes archivados</p></div>
     </div>
 
-    ${noLib.length?`<div class="note warn" style="margin-bottom:14px">${ICON.warn}<div><b>${noLib.length===1?"Una máquina sigue sin liberar":`${noLib.length} máquinas siguen sin liberar`} para producción normal:</b> ${esc(noLib.map(m=>m.id).join(", "))}.</div></div>`:""}
-    ${provAbiertos?`<div class="note warn" style="margin-bottom:14px">${ICON.warn}<div><b>${provAbiertos} ${provAbiertos===1?"arreglo provisional":"arreglos provisionales"} sin convertir en reparación definitiva.</b> Es la deuda que un día se cobra sola.</div></div>`:""}
+    ${abiertas.length?`<div class="note warn" style="margin-bottom:12px">${ICON.warn}<div><b>${abiertas.length} ${abiertas.length===1?"avería abierta":"averías abiertas"}:</b> ${esc(abiertas.map(x=>x.mid).join(", "))}. ${nfmt(abiertas.reduce((s,x)=>s+(+x.paro||0),0),1)} h de paro acumuladas sin cerrar.</div></div>`:""}
+    ${noLib.length?`<div class="note warn" style="margin-bottom:12px">${ICON.warn}<div><b>${noLib.length===1?"Una máquina sigue sin liberar":`${noLib.length} máquinas siguen sin liberar`} para producción normal:</b> ${esc(noLib.map(m=>m.id).join(", "))}.</div></div>`:""}
+    ${prov?`<div class="note warn" style="margin-bottom:12px">${ICON.warn}<div><b>${prov} ${prov===1?"arreglo provisional":"arreglos provisionales"} sin convertir en reparación definitiva.</b> Es la deuda que un día se cobra sola.</div></div>`:""}
 
+    <p class="eyebrow" style="margin:20px 0 8px">Fiabilidad</p>
     <div class="kpis">
       ${kpi("Cumplimiento del plan", cumpl===null?"—":cumpl, cumpl===null?"":"%",
-            cumpl===null?"Sin partes cerrados todavía":`${enPlazo} de ${hist.length} en plazo`, cumpl!==null&&cumpl<80?"down":"up")}
+            cumpl===null?"Sin partes cerrados":`${enPlazo} de ${hist.length} en plazo`, cumpl!==null&&cumpl<80?"down":"up")}
+      ${kpi("Disponibilidad técnica", disp===null?"—":nfmt(disp,1), disp===null?"":"%",
+            disp===null?"Falta indicar horas por semana":"Objetivo 95 % · últimos 90 días", disp!==null&&disp<95?"down":"up")}
+      ${kpi("MTBF", mtb===null?"—":nfmt(mtb,0), mtb===null?"":"h",
+            "Horas de marcha entre fallos · 90 días")}
+      ${kpi("MTTR", mtr===null?"—":nfmt(mtr,1), mtr===null?"":"h", "Horas por reparación")}
       ${kpi("Paro no programado", nfmt(paroTot,1), "h",
-            DB.averias.length?`${DB.averias.length} ${DB.averias.length===1?"avería":"averías"} registradas`:"Sin averías registradas", paroTot?"down":"")}
-      ${kpi("Coste de mantenimiento", costeTot?nfmt(costeTot):"—", costeTot?"€":"",
-            costeTot?`${pctCorr} % correctivo`:"Falta la tarifa por hora", costeTot&&pctCorr>50?"down":"")}
-      ${kpi("Tareas vencidas ahora", venc.length, "",
-            venc.length?"Primeras en la pantalla del mecánico":"Todo al día", venc.length?"down":"up")}
+            DB.averias.length?`${DB.averias.length} ${DB.averias.length===1?"avería":"averías"} en total`:"Sin averías registradas", paroTot?"down":"")}
+      ${kpi("Averías abiertas", abiertas.length, "", abiertas.length?"Pendientes de cerrar":"Ninguna", abiertas.length?"down":"up")}
+      ${kpi("Tareas vencidas", venc.length, "", venc.length?"Primeras en la pantalla del mecánico":"Todo al día", venc.length?"down":"up")}
+      ${kpi("Puntos no conformes", noConf, "", noConf?"Detectados en los partes":"Ninguno detectado", noConf?"down":"up")}
     </div>
 
-    <div class="grid2">
+    <p class="eyebrow" style="margin:22px 0 8px">Coste</p>
+    <div class="kpis">
+      ${kpi("Coste de mantenimiento", costeTot?nfmt(costeTot):"—", costeTot?"€":"", costeTot?"Preventivo + correctivo":"Falta la tarifa por hora")}
+      ${kpi("Reparto correctivo", pctCorr===null?"—":pctCorr, pctCorr===null?"":"%", pctCorr===null?"Sin datos de coste":"Del gasto total", pctCorr!==null&&pctCorr>50?"down":"up")}
+      ${kpi("Coste del preventivo", costeTot?nfmt(costeTot-corrTot):"—", costeTot?"€":"", `${nfmt(horasPrev,1)} h dedicadas`)}
+      ${kpi("Coste del correctivo", costeTot?nfmt(corrTot):"—", costeTot?"€":"", "Reparación + línea parada", corrTot?"down":"")}
+    </div>
+
+    <p class="eyebrow" style="margin:22px 0 8px">Instalación</p>
+    <div class="kpis">
+      ${kpi("Máquinas con plan", (DB.maquinas.length-sinPlan.length)+" / "+DB.maquinas.length, "",
+            sinPlan.length?`Faltan: ${esc(sinPlan.map(m=>m.id).join(", "))}`:"Todas cubiertas", sinPlan.length?"down":"up")}
+      ${kpi("Tareas definidas", DB.maquinas.reduce((s,m)=>s+(m.tareas||[]).length,0), "", "En todo el plan preventivo")}
+      ${kpi("Carga preventiva", hm(carga), "", "A la semana, todas las máquinas", carga>600?"down":"")}
+      ${kpi("Tareas para hoy", hoy.length, "", "Además de las vencidas")}
+      ${kpi("Repuestos bajo mínimo", bajo, "", sinStock?`${sinStock} sin stock`:"Stock correcto", bajo?"down":"up")}
+      ${kpi("Pendientes de visto bueno", pendVB, "", pendVB?"Máquinas sin liberar tras intervención":"Ninguno", pendVB?"down":"up")}
+      ${kpi("Arreglos provisionales", prov, "", prov?"Esperando reparación definitiva":"Ninguno", prov?"down":"up")}
+      ${kpi("Partes archivados", hist.length, "", "Trazabilidad para auditoría")}
+    </div>
+
+    <div class="grid2" style="margin-top:22px">
       <div class="card chartcard">
         <div class="hd"><h2>Cumplimiento del plan</h2><div style="flex:1"></div><span class="sub">% en plazo, por mes</span></div>
         ${cum.some(v=>v!=null) ? `<div class="bd">${barras({labels, values:cum, suffix:"%"})}</div>`
-          : panelVacio("Aún sin partes cerrados", "Este es el indicador que enseña si el preventivo se cumple de verdad. Se dibuja solo desde el primer parte que firme el mecánico.")}
+          : panelVacio("Aún sin partes cerrados", "Es el indicador que enseña si el preventivo se cumple de verdad. Se dibuja solo desde el primer parte que firme el mecánico.")}
       </div>
       <div class="card chartcard">
         <div class="hd"><h2>Paro no programado</h2><div style="flex:1"></div><span class="sub">horas al mes</span></div>
@@ -1393,12 +1550,24 @@ function viewCuadro(){
       </div>
     </div>
 
+    <div class="grid2" style="margin-top:14px">
+      <div class="card chartcard">
+        <div class="hd"><h2>Averías por mes</h2><div style="flex:1"></div><span class="sub">número de partes</span></div>
+        ${nav.some(v=>v>0) ? `<div class="bd">${barras({labels, values:nav, entero:true, color:"var(--s2)"})}</div>`
+          : panelVacio("Sin averías registradas", "El número de averías al mes es la forma más simple de ver si la máquina se está estabilizando.")}
+      </div>
+      <div class="card chartcard">
+        <div class="hd"><h2>Partes preventivos cerrados</h2><div style="flex:1"></div><span class="sub">al mes</span></div>
+        ${npart.some(v=>v>0) ? `<div class="bd">${barras({labels, values:npart, entero:true})}</div>`
+          : panelVacio("Sin partes cerrados", "Aquí se ve el ritmo real de trabajo del departamento, mes a mes.")}
+      </div>
+    </div>
+
     <div class="card" style="margin-top:14px">
       <div class="hd"><h2>Coste de mantenimiento por máquina</h2><div style="flex:1"></div><span class="sub">acumulado</span></div>
       ${costes.length ? `<div class="bd">
         <div class="legend"><span><i style="background:var(--s1)"></i>Preventivo</span><span><i style="background:var(--s2)"></i>Correctivo, incluido el coste del paro</span></div>
-        ${costes.map(c=>{
-          const max = costes[0].tot || 1;
+        ${costes.map(c=>{ const max = costes[0].tot || 1;
           return `<div style="margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px">
               <span><span class="code">${esc(c.m.id)}</span> <span style="color:var(--ink-2)">${esc(c.m.nombre)}</span>${c.nAv?` <span class="sub">· ${c.nAv} ${c.nAv===1?"avería":"averías"}</span>`:""}</span>
@@ -1408,13 +1577,25 @@ function viewCuadro(){
               <div style="width:2px;background:var(--surface)"></div>
               <div style="width:${(c.corr/max*100).toFixed(1)}%;background:var(--s2)" title="Correctivo ${nfmt(c.corr)} €"></div>
             </div></div>`;}).join("")}
-        ${costes.length&&pctCorr>50?`<div class="note" style="margin-top:14px">${ICON.info}<div>El <b>${pctCorr} %</b> del gasto se va en correctivo. Esta es la pantalla que convierte el mantenimiento en una decisión de inversión: cuando una máquina se lleva más en averías que en prevención, o se refuerza su plan o se plantea sustituirla.</div></div>`:""}
+        ${pctCorr>50?`<div class="note" style="margin-top:14px">${ICON.info}<div>El <b>${pctCorr} %</b> del gasto se va en correctivo. Cuando una máquina se lleva más en averías que en prevención, o se refuerza su plan o se plantea sustituirla.</div></div>`:""}
       </div>`
-      : panelVacio("Falta decir cuánto cuesta una hora",
-          "Sin la tarifa de mano de obra y el coste de una hora de máquina parada no se puede poner precio a nada. Están justo abajo y se rellenan una sola vez.")}
+      : panelVacio("Falta decir cuánto cuesta una hora", "Sin la tarifa de mano de obra y el coste de una hora de máquina parada no se puede poner precio a nada. Están al final de esta pantalla.")}
     </div>
 
     <div class="grid2" style="margin-top:14px">
+      <div class="card">
+        <div class="hd"><h2>Averías abiertas</h2><div style="flex:1"></div><span class="sub">${abiertas.length}</span></div>
+        ${abiertas.length?`<div class="tablewrap"><table style="min-width:0">
+          <thead><tr><th style="width:78px">Máquina</th><th>Qué pasa</th><th class="num">Paro</th><th class="num">Días</th></tr></thead>
+          <tbody>${abiertas.map(x=>{
+            const m = byId(x.mid)||{crit:"C"}, d = parseISO(x.fecha), dias = d?diffDays(today(),d):0;
+            return `<tr>
+              <td><span class="code">${esc(x.mid)}</span> ${critPill(m.crit)}</td>
+              <td>${esc(x.desc)}${x.cons?`<div class="sub" style="font-size:12px">${esc(x.cons)}</div>`:""}</td>
+              <td class="num">${nfmt(x.paro,1)} h</td>
+              <td class="num" style="${dias>3?"color:var(--crit-ink);font-weight:600":""}">${dias}</td></tr>`;}).join("")}</tbody>
+        </table></div>`: panelVacio("Ninguna avería abierta", "Todas las solicitudes de reparación registradas están cerradas.")}
+      </div>
       <div class="card">
         <div class="hd"><h2>Qué está vencido ahora</h2><div style="flex:1"></div><span class="sub">${venc.length}</span></div>
         ${venc.length?`<div class="tablewrap"><table style="min-width:0">
@@ -1425,21 +1606,60 @@ function viewCuadro(){
             <td class="num" style="color:var(--crit-ink);font-weight:600">${-x.d} d</td></tr>`).join("")}</tbody>
         </table></div>`: panelVacio("Nada vencido", "Todas las tareas programadas están dentro de plazo.")}
       </div>
+    </div>
+
+    <div class="grid2" style="margin-top:14px">
       <div class="card">
-        <div class="hd"><h2>Estado de la instalación</h2></div>
-        <div class="bd">
-          <div class="summary">
-            <div><span>Máquinas con plan cargado</span><span>${DB.maquinas.length-sinPlan.length} de ${DB.maquinas.length}${sinPlan.length?` · faltan ${esc(sinPlan.map(m=>m.id).join(", "))}`:""}</span></div>
-            <div><span>Tareas definidas</span><span>${DB.maquinas.reduce((s,m)=>s+(m.tareas||[]).length,0)}</span></div>
-            <div><span>Carga preventiva semanal</span><span class="mono">${hm(carga)}</span></div>
-            <div><span>MTTR</span><span class="mono">${mttr===null?"—":nfmt(mttr,1)+" h"}</span></div>
-            <div><span>Repuestos bajo mínimo</span><span style="${bajo?"color:var(--crit-ink);font-weight:600":""}">${bajo}</span></div>
-            <div><span>Partes archivados</span><span>${hist.length}</span></div>
-          </div>
-          ${carga>0?`<div class="note" style="margin-top:14px">${ICON.info}<div>Con dos personas en el departamento, ${hm(carga)} de preventivo a la semana ${carga>600?"<b>ya aprieta</b>":"es asumible"}. Vigila este número al cargar máquinas nuevas.</div></div>`:""}
-        </div>
+        <div class="hd"><h2>Cumplimiento por máquina</h2><div style="flex:1"></div><span class="sub">% en plazo</span></div>
+        ${cumplPorMaquina().length?`<div class="bd">${ranking(cumplPorMaquina().map(c=>({
+            id:c.m.id, nombre:c.m.nombre, v:c.pct==null?0:c.pct,
+            txt:c.pct==null?"sin partes":c.pct+" %",
+            extra:c.venc?`${c.venc} vencidas`:"",
+            color:c.pct==null?"var(--grid)":c.pct>=90?"var(--ok-dot)":c.pct>=75?"var(--warn-dot)":"var(--crit-dot)"
+          })))}</div>`: panelVacio("Sin datos por máquina", "Aparece en cuanto haya máquinas con plan y partes cerrados.")}
+      </div>
+      <div class="card">
+        <div class="hd"><h2>Máquinas que más paran</h2><div style="flex:1"></div><span class="sub">horas acumuladas</span></div>
+        ${paroPorMaquina().length?`<div class="bd">${ranking(paroPorMaquina().map(p=>({
+            id:p.m.id, nombre:p.m.nombre, v:p.paro, txt:nfmt(p.paro,1)+" h",
+            extra:`${p.n} ${p.n===1?"avería":"averías"}`, color:"var(--s2)"
+          })))}</div>`: panelVacio("Sin paros registrados", "Ninguna máquina acumula horas de parada todavía.")}
       </div>
     </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="hd"><h2>Última intervención por máquina</h2><div style="flex:1"></div><span class="sub">para detectar olvidos</span></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Máquina</th><th>Grupo</th><th class="num">Tareas</th><th>Última intervención</th><th class="num">Días sin tocar</th><th>Estado</th></tr></thead>
+        <tbody>${DB.maquinas.map(m=>{
+          const u = ultimoParte(m.id), dias = u ? diffDays(today(), u) : null;
+          const ag2 = (m.tareas||[]).map(t=>estadoTarea(m,t)), v = ag2.filter(e=>e.st==="vencida").length;
+          return `<tr>
+            <td><span class="code">${esc(m.id)}</span> ${critPill(m.crit)} <span style="color:var(--ink-2)">${esc(m.nombre)}</span></td>
+            <td class="sub">${esc(m.grupo||"—")}</td>
+            <td class="num">${(m.tareas||[]).length}</td>
+            <td class="mono">${u?esc(fmtFull(u)):"—"}</td>
+            <td class="num" style="${dias!==null&&dias>30?"color:var(--crit-ink);font-weight:600":""}">${dias===null?"—":dias}</td>
+            <td>${!(m.tareas||[]).length?'<span class="pill warn"><i></i>Sin plan</span>'
+                 : v?`<span class="pill crit"><i></i>${v} vencidas</span>`:'<span class="pill ok"><i></i>Al día</span>'}</td>
+          </tr>`;}).join("")}</tbody>
+      </table></div>
+    </div>
+
+    ${hist.length?`<div class="card" style="margin-top:14px">
+      <div class="hd"><h2>Actividad reciente</h2><div style="flex:1"></div><span class="sub">últimos 10 partes</span></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Fecha</th><th>Máquina</th><th>Intervención</th><th>Por</th><th class="num">Tiempo</th><th>Incidencias</th></tr></thead>
+        <tbody>${hist.slice().sort((x,y)=>String(y.fecha).localeCompare(String(x.fecha))).slice(0,10).map(h=>`<tr>
+          <td class="mono">${esc(fmtFull(parseISO(h.fecha)))}</td>
+          <td><span class="code">${esc(h.mid)}</span></td>
+          <td>${esc(h.tarea)}</td>
+          <td class="sub">${esc(h.por)}</td>
+          <td class="num">${h.min} min</td>
+          <td>${h.tarde?'<span class="pill warn"><i></i>Fuera de plazo</span>':""}${h.noConf?`<span class="pill crit" style="margin-left:5px"><i></i>${h.noConf} no conf.</span>`:""}${h.prov?'<span class="pill warn" style="margin-left:5px"><i></i>Provisional</span>':""}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </div>`:""}
 
     ${RO()?"":`
     <div class="card" style="margin-top:14px">
@@ -2071,6 +2291,12 @@ function bindView(){
   on("[data-fotos]", e=>{ state.modal="fotos:"+e.currentTarget.dataset.fotos; renderModal(); });
   on('[data-act="averia"]', ()=>{ state.modal="averia"; renderModal(); });
   on("[data-addpart]", ()=>{ state.modal="rep"; renderModal(); });
+  v.querySelectorAll("[data-pf]").forEach(n=>n.addEventListener("change", e=>{
+    const [i,f] = e.target.dataset.pf.split("|");
+    const m = byId(state.mid); if(m && m.repuestos[+i]) m.repuestos[+i][f] = +e.target.value || 0;
+  }));
+  on("[data-savepart]", async ()=>{ render(); await guardar("Stock actualizado."); });
+  on("[data-irmaq]", e=>{ state.mid=e.currentTarget.dataset.irmaq; state.view="maquina"; state.tab="repuestos"; render(); });
   on("[data-delpart]", async e=>{
     const m=byId(state.mid); m.repuestos.splice(+e.currentTarget.dataset.delpart,1); render(); await guardar("Repuesto eliminado.");
   });
