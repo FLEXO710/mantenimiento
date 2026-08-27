@@ -1,0 +1,2216 @@
+<title>Mantenimiento DORDIV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+/* ─────────────── TOKENS ─────────────── */
+:root{
+  color-scheme: light;
+  --plane:#E9EEF1;
+  --surface:#FFFFFF;
+  --surface-2:#F4F8F9;
+  --surface-3:#E3EBEE;
+  --line:#D3DEE3;
+  --line-2:#BACAD1;
+  --ink:#0B1D24;
+  --ink-2:#46606B;
+  --ink-3:#7A929C;
+  --brand:#0A4A5A;
+  --brand-2:#0E6A80;
+  --brand-ink:#FFFFFF;
+  --wash:#E2EFF2;
+  --wash-2:#CFE4E9;
+
+  --ok-bg:#E4F4E4;   --ok-ink:#166B16;   --ok-dot:#0ca30c;
+  --warn-bg:#FCF1DA; --warn-ink:#7A5600; --warn-dot:#fab219;
+  --crit-bg:#FBE7E7; --crit-ink:#96201F; --crit-dot:#d03b3b;
+  --info-bg:#E2EFF2; --info-ink:#0A4A5A; --info-dot:#0E6A80;
+  --neut-bg:#EBF0F2; --neut-ink:#46606B; --neut-dot:#7A929C;
+
+  --s1:#2a78d6;  /* serie 1 — preventivo */
+  --s2:#eb6834;  /* serie 2 — correctivo */
+  --grid:#E1E8EB;
+  --axis:#C3D1D7;
+
+  --shadow:0 1px 2px rgba(11,29,36,.06), 0 6px 18px -8px rgba(11,29,36,.16);
+  --shadow-lg:0 20px 60px -20px rgba(11,29,36,.4);
+  --r:10px;
+  --ff:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fm:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --plane:#081116;
+    --surface:#101E24;
+    --surface-2:#152730;
+    --surface-3:#1B303A;
+    --line:#223B45;
+    --line-2:#2F505D;
+    --ink:#E7EFF2;
+    --ink-2:#9FB6BF;
+    --ink-3:#728D98;
+    --brand:#4FB3C9;
+    --brand-2:#67C6DA;
+    --brand-ink:#04191F;
+    --wash:#132C35;
+    --wash-2:#1A3B47;
+
+    --ok-bg:#12301A;   --ok-ink:#7CD97C;   --ok-dot:#0ca30c;
+    --warn-bg:#332609; --warn-ink:#F2C965; --warn-dot:#fab219;
+    --crit-bg:#3A1616; --crit-ink:#F09B9B; --crit-dot:#d03b3b;
+    --info-bg:#132C35; --info-ink:#7ECDDF; --info-dot:#4FB3C9;
+    --neut-bg:#18292F; --neut-ink:#9FB6BF; --neut-dot:#728D98;
+
+    --s1:#3987e5; --s2:#d95926;
+    --grid:#1E343D; --axis:#2B4854;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 24px -10px rgba(0,0,0,.7);
+    --shadow-lg:0 24px 70px -20px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --plane:#081116; --surface:#101E24; --surface-2:#152730; --surface-3:#1B303A;
+  --line:#223B45; --line-2:#2F505D;
+  --ink:#E7EFF2; --ink-2:#9FB6BF; --ink-3:#728D98;
+  --brand:#4FB3C9; --brand-2:#67C6DA; --brand-ink:#04191F;
+  --wash:#132C35; --wash-2:#1A3B47;
+  --ok-bg:#12301A; --ok-ink:#7CD97C; --ok-dot:#0ca30c;
+  --warn-bg:#332609; --warn-ink:#F2C965; --warn-dot:#fab219;
+  --crit-bg:#3A1616; --crit-ink:#F09B9B; --crit-dot:#d03b3b;
+  --info-bg:#132C35; --info-ink:#7ECDDF; --info-dot:#4FB3C9;
+  --neut-bg:#18292F; --neut-ink:#9FB6BF; --neut-dot:#728D98;
+  --s1:#3987e5; --s2:#d95926;
+  --grid:#1E343D; --axis:#2B4854;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 24px -10px rgba(0,0,0,.7);
+  --shadow-lg:0 24px 70px -20px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--plane); color:var(--ink);
+  font-family:var(--ff); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;cursor:pointer;}
+:focus-visible{outline:2px solid var(--brand-2); outline-offset:2px; border-radius:4px;}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:.01ms !important; transition-duration:.01ms !important;} }
+
+/* ─────────────── SHELL ─────────────── */
+.shell{min-height:100dvh; display:flex; flex-direction:column;}
+.topbar{
+  display:flex; align-items:center; gap:14px; padding:0 16px; height:56px;
+  background:var(--brand); color:var(--brand-ink); position:sticky; top:0; z-index:40;
+}
+:root[data-theme="dark"] .topbar, :root:not([data-theme="light"]) .topbar{}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .topbar{background:#0B222A;color:var(--ink);} }
+:root[data-theme="dark"] .topbar{background:#0B222A;color:var(--ink);}
+
+.brand{display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:.2px; white-space:nowrap;}
+.brand svg{flex:none;}
+.brand b{font-weight:700;}
+.brand span{opacity:.72; font-weight:400;}
+.topbar .spacer{flex:1;}
+
+.roleswitch{display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.12); border-radius:8px; padding:3px;}
+:root[data-theme="dark"] .roleswitch{background:rgba(255,255,255,.07);}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .roleswitch{background:rgba(255,255,255,.07);} }
+.roleswitch button{
+  border:0; background:transparent; color:inherit; opacity:.78;
+  padding:5px 11px; border-radius:6px; font-size:13px; font-weight:500;
+}
+.roleswitch button[aria-pressed="true"]{background:var(--surface); color:var(--ink); opacity:1; font-weight:600;}
+.demoTag{
+  font-family:var(--fm); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  opacity:.6; padding-right:4px;
+}
+.sync{
+  display:flex; align-items:center; gap:7px; font-size:12.5px; font-family:var(--fm);
+  background:rgba(255,255,255,.12); padding:5px 10px; border-radius:999px; white-space:nowrap;
+}
+:root[data-theme="dark"] .sync{background:rgba(255,255,255,.07);}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .sync{background:rgba(255,255,255,.07);} }
+.sync i{width:7px;height:7px;border-radius:50%;background:var(--warn-dot);display:block;flex:none;}
+
+.body{flex:1; display:flex; min-height:0;}
+.rail{
+  width:212px; flex:none; background:var(--surface); border-right:1px solid var(--line);
+  padding:14px 10px; display:flex; flex-direction:column; gap:2px;
+}
+.rail .lbl{
+  font-family:var(--fm); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-3); padding:12px 10px 6px;
+}
+.rail button{
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  border:0; background:transparent; padding:9px 10px; border-radius:8px;
+  font-size:14px; color:var(--ink-2); font-weight:500;
+}
+.rail button:hover{background:var(--surface-2); color:var(--ink);}
+.rail button[aria-current="true"]{background:var(--wash); color:var(--brand); font-weight:600;}
+:root[data-theme="dark"] .rail button[aria-current="true"]{color:var(--brand-2);}
+.rail .count{margin-left:auto; font-family:var(--fm); font-size:11.5px; background:var(--crit-bg); color:var(--crit-ink); padding:1px 7px; border-radius:999px;}
+
+.rail[hidden], .mobnav[hidden]{display:none !important;}
+.main{flex:1; min-width:0; overflow-x:hidden;}
+.wrap{max-width:1180px; margin:0 auto; padding:22px 20px 80px;}
+.wrap.tab{max-width:820px; padding:18px 16px 90px;}
+
+/* ─────────────── TYPO ─────────────── */
+h1{font-size:22px; line-height:1.25; margin:0; font-weight:600; text-wrap:balance;}
+h2{font-size:15px; margin:0; font-weight:600;}
+.eyebrow{font-family:var(--fm); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin:0 0 3px;}
+.sub{color:var(--ink-2); font-size:13.5px; margin:3px 0 0;}
+.mono{font-family:var(--fm); font-variant-numeric:tabular-nums;}
+.pagehead{display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:18px;}
+.pagehead .spacer{flex:1;}
+
+/* ─────────────── PIECES ─────────────── */
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow);}
+.card .hd{display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--line);}
+.card .hd h2{flex:1;}
+.card .bd{padding:16px;}
+
+.pill{
+  display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
+  padding:3px 9px; border-radius:999px; white-space:nowrap; letter-spacing:.01em;
+}
+.pill i{width:6px;height:6px;border-radius:50%;display:block;flex:none;}
+.pill.ok{background:var(--ok-bg);color:var(--ok-ink);}   .pill.ok i{background:var(--ok-dot);}
+.pill.warn{background:var(--warn-bg);color:var(--warn-ink);} .pill.warn i{background:var(--warn-dot);}
+.pill.crit{background:var(--crit-bg);color:var(--crit-ink);} .pill.crit i{background:var(--crit-dot);}
+.pill.info{background:var(--info-bg);color:var(--info-ink);} .pill.info i{background:var(--info-dot);}
+.pill.neut{background:var(--neut-bg);color:var(--neut-ink);} .pill.neut i{background:var(--neut-dot);}
+
+.code{
+  font-family:var(--fm); font-size:12px; font-weight:600; letter-spacing:.04em;
+  background:var(--surface-3); color:var(--ink-2); padding:2px 7px; border-radius:5px;
+}
+.crit-A{background:var(--crit-bg); color:var(--crit-ink);}
+.crit-B{background:var(--warn-bg); color:var(--warn-ink);}
+.crit-C{background:var(--neut-bg); color:var(--neut-ink);}
+
+.btn{
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink);
+  padding:8px 14px; border-radius:8px; font-size:14px; font-weight:500;
+}
+.btn:hover{background:var(--surface-2);}
+.btn.primary{background:var(--brand); border-color:var(--brand); color:var(--brand-ink); font-weight:600;}
+.btn.primary:hover{background:var(--brand-2); border-color:var(--brand-2);}
+.btn.ghost{border-color:transparent; background:transparent; color:var(--ink-2);}
+.btn.ghost:hover{background:var(--surface-2); color:var(--ink);}
+.btn.big{padding:13px 18px; font-size:16px; border-radius:10px; width:100%;}
+.btn[disabled]{opacity:.45; cursor:not-allowed;}
+
+.note{
+  display:flex; gap:10px; background:var(--wash); border:1px solid var(--wash-2);
+  border-radius:8px; padding:11px 13px; font-size:13px; color:var(--ink-2); line-height:1.45;
+}
+.note b{color:var(--ink);}
+.note.warn{background:var(--warn-bg); border-color:transparent; color:var(--warn-ink);}
+.note.warn b{color:var(--warn-ink);}
+.note svg{flex:none; margin-top:1px;}
+
+/* ─────────────── TASK LIST (mecánico) ─────────────── */
+.daybar{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:14px 16px; box-shadow:var(--shadow); margin-bottom:16px;
+}
+.daybar .big{font-size:19px; font-weight:600; letter-spacing:-.01em;}
+.daybar .spacer{flex:1;}
+.load{min-width:240px; flex:1;}
+.load .row{display:flex; justify-content:space-between; font-size:12px; color:var(--ink-2); margin-bottom:5px;}
+.load .track{height:7px; border-radius:999px; background:var(--surface-3); overflow:hidden; display:flex;}
+.load .fill{height:100%; background:var(--brand);}
+.load .fill.hi{background:var(--warn-dot);}
+
+.group{margin:22px 0 10px; display:flex; align-items:center; gap:9px;}
+.group h2{font-size:12px; font-family:var(--fm); letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); font-weight:500;}
+.group .n{font-family:var(--fm); font-size:12px; color:var(--ink-3);}
+.group hr{flex:1; border:0; border-top:1px solid var(--line); margin:0;}
+
+.tasks{display:flex; flex-direction:column; gap:9px;}
+.task{
+  display:flex; align-items:stretch; gap:0; width:100%; text-align:left;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:0; overflow:hidden; box-shadow:var(--shadow); transition:transform .12s ease, border-color .12s ease;
+}
+.task:hover{border-color:var(--line-2); transform:translateY(-1px);}
+.task .stripe{width:4px; flex:none; background:var(--neut-dot);}
+.task.s-vencida .stripe{background:var(--crit-dot);}
+.task.s-hoy .stripe{background:var(--brand);}
+.task.s-hecha .stripe{background:var(--ok-dot);}
+.task.s-pospuesta .stripe{background:var(--warn-dot);}
+.task .in{flex:1; padding:13px 15px; min-width:0;}
+.task .t1{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:5px;}
+.task .name{font-size:16px; font-weight:600; line-height:1.3; margin:0 0 4px; text-wrap:balance;}
+.task .t2{display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-2);}
+.task .t2 .mono{font-size:12px;}
+.task .go{display:flex; align-items:center; padding-right:14px; color:var(--ink-3);}
+.task.s-hecha{opacity:.72;}
+
+.quickrow{display:flex; gap:10px; margin-top:18px;}
+.quickrow .btn{flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; font-weight:600;}
+
+/* ─────────────── TABLES ─────────────── */
+.tablewrap{overflow-x:auto;}
+table{border-collapse:collapse; width:100%; font-size:13.5px; min-width:560px;}
+th{
+  text-align:left; font-family:var(--fm); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-3); font-weight:500; padding:9px 12px; border-bottom:1px solid var(--line); white-space:nowrap;
+}
+td{padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:middle;}
+tr:last-child td{border-bottom:0;}
+td.num{text-align:right; font-family:var(--fm); font-variant-numeric:tabular-nums;}
+th.num{text-align:right;}
+tbody tr:hover{background:var(--surface-2);}
+
+/* ─────────────── KPI ─────────────── */
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:18px;}
+.kpi{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:15px 16px; box-shadow:var(--shadow);}
+.kpi .k{font-size:12px; color:var(--ink-2); margin-bottom:8px; font-weight:500;}
+.kpi .v{font-size:30px; font-weight:600; letter-spacing:-.02em; line-height:1;}
+.kpi .v small{font-size:16px; font-weight:500; color:var(--ink-2); margin-left:2px;}
+.kpi .d{font-size:12px; margin-top:8px; color:var(--ink-2); display:flex; align-items:center; gap:5px;}
+.kpi .d.up{color:var(--ok-ink);} .kpi .d.down{color:var(--crit-ink);}
+
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:14px;}
+.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--ink-2); margin-bottom:12px;}
+.legend span{display:flex; align-items:center; gap:6px;}
+.legend i{width:10px;height:10px;border-radius:3px;display:block;}
+
+/* ─────────────── PLAN GRID ─────────────── */
+.plangrid{overflow-x:auto; padding-bottom:4px;}
+.plangrid table{min-width:820px; font-size:12px;}
+.plangrid th.wk{
+  padding:6px 0; text-align:center; width:22px; font-size:9.5px; letter-spacing:0;
+  font-family:var(--fm); color:var(--ink-3);
+}
+.plangrid td.tname{white-space:nowrap; padding:6px 12px 6px 4px; font-size:12.5px; border-bottom:1px solid var(--line);}
+.plangrid td.c{padding:0; width:22px; border-bottom:1px solid var(--surface); border-right:1px solid var(--surface);}
+.plangrid .cell{height:20px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#fff;}
+.plangrid .f-semanal{background:var(--s1);}
+.plangrid .f-mensual{background:var(--s2);}
+.plangrid .f-anual{background:var(--brand);}
+.plangrid .f-none{background:var(--surface-2);}
+.plangrid .f-off{background:repeating-linear-gradient(45deg,var(--surface-3),var(--surface-3) 3px,var(--surface-2) 3px,var(--surface-2) 6px);}
+.plangrid td.now{box-shadow:inset 0 0 0 2px var(--ink);}
+.planlegend{display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--ink-2); margin:12px 0 0;}
+.planlegend span{display:flex;align-items:center;gap:6px;}
+.planlegend i{width:12px;height:12px;border-radius:3px;display:block;}
+
+/* ─────────────── MODAL ─────────────── */
+.scrim{
+  position:fixed; inset:0; background:rgba(6,18,23,.55); backdrop-filter:blur(3px);
+  display:flex; align-items:flex-end; justify-content:center; z-index:100; padding:0;
+}
+@media (min-width:760px){ .scrim{align-items:center; padding:24px;} }
+.sheet{
+  background:var(--surface); width:100%; max-width:660px; max-height:94dvh;
+  border-radius:16px 16px 0 0; display:flex; flex-direction:column; box-shadow:var(--shadow-lg);
+  animation:rise .22s ease-out;
+}
+@media (min-width:760px){ .sheet{border-radius:14px;} }
+@keyframes rise{from{transform:translateY(18px); opacity:0;} to{transform:none; opacity:1;}}
+.sheet header{padding:16px 18px 14px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:flex-start;}
+.sheet header .x{margin-left:auto; border:0; background:transparent; color:var(--ink-3); padding:4px; border-radius:6px;}
+.sheet header .x:hover{background:var(--surface-2); color:var(--ink);}
+.sheet .content{padding:18px; overflow-y:auto; flex:1;}
+.sheet footer{padding:14px 18px; border-top:1px solid var(--line); display:flex; gap:10px; align-items:center; background:var(--surface-2); border-radius:0 0 14px 14px;}
+.sheet footer .spacer{flex:1;}
+
+.steps{display:flex; gap:4px; padding:0 18px 14px;}
+.steps div{flex:1; height:3px; border-radius:999px; background:var(--surface-3);}
+.steps div.on{background:var(--brand);}
+.steps div.done{background:var(--ok-dot);}
+
+.field{margin-bottom:16px;}
+.field > label{display:block; font-size:13px; font-weight:600; margin-bottom:7px;}
+.field .help{font-size:12.5px; color:var(--ink-2); margin:-3px 0 8px;}
+input[type=text], input[type=number], input[type=email], input[type=password], input[type=date], textarea, select{
+  width:100%; font:inherit; font-size:15px; padding:10px 12px; border-radius:8px;
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink);
+}
+textarea{min-height:76px; resize:vertical;}
+input:focus, textarea:focus, select:focus{border-color:var(--brand-2); outline:none; box-shadow:0 0 0 3px var(--wash);}
+
+.checkbig{
+  display:flex; gap:12px; align-items:flex-start; padding:14px; border:1px solid var(--line-2);
+  border-radius:10px; cursor:pointer; background:var(--surface);
+}
+.checkbig:hover{background:var(--surface-2);}
+.checkbig input{width:22px;height:22px;margin:0; flex:none; accent-color:var(--brand);}
+.checkbig .txt{font-size:14.5px; line-height:1.4;}
+.checkbig.on{border-color:var(--ok-dot); background:var(--ok-bg);}
+.checkbig.on .txt{color:var(--ok-ink);}
+
+.chk{display:flex; flex-direction:column; gap:8px;}
+.chkitem{border:1px solid var(--line); border-radius:9px; padding:11px 13px; background:var(--surface);}
+.chkitem .top{display:flex; gap:10px; align-items:center;}
+.chkitem .lbl{flex:1; font-size:14.5px; line-height:1.35;}
+.seg{display:flex; gap:0; border:1px solid var(--line-2); border-radius:8px; overflow:hidden; flex:none;}
+.seg button{border:0; background:var(--surface); padding:7px 11px; font-size:12.5px; color:var(--ink-2); border-right:1px solid var(--line);}
+.seg button:last-child{border-right:0;}
+.seg button:hover{background:var(--surface-2);}
+.seg button.on-ok{background:var(--ok-dot); color:#fff; font-weight:600;}
+.seg button.on-no{background:var(--crit-dot); color:#fff; font-weight:600;}
+.seg button.on-na{background:var(--neut-dot); color:#fff; font-weight:600;}
+.seg button.on-sel{background:var(--brand); color:var(--brand-ink); font-weight:600;}
+
+.photos{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.photo{
+  border:2px dashed var(--line-2); border-radius:10px; aspect-ratio:4/3; display:flex;
+  flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--ink-2);
+  background:var(--surface-2); font-size:13px; font-weight:500; position:relative; overflow:hidden; padding:8px;
+  text-align:center;
+}
+.photo:hover{border-color:var(--brand-2); color:var(--brand);}
+.photo img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
+.photo .tag{
+  position:absolute; left:8px; bottom:8px; background:rgba(6,18,23,.78); color:#fff;
+  font-family:var(--fm); font-size:10px; padding:3px 7px; border-radius:5px; letter-spacing:.03em;
+}
+.photo.filled{border-style:solid; border-color:var(--ok-dot);}
+
+.reqline{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2); margin-top:10px;}
+.linkish{background:none;border:0;color:var(--brand);text-decoration:underline;padding:0;font-size:12.5px;}
+:root[data-theme="dark"] .linkish{color:var(--brand-2);}
+
+.summary{background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:14px; font-size:13.5px;}
+.summary div{display:flex; justify-content:space-between; gap:12px; padding:5px 0;}
+.summary div + div{border-top:1px solid var(--line);}
+.summary span:first-child{color:var(--ink-2);}
+.summary span:last-child{font-weight:600; text-align:right;}
+
+.pinpad{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; max-width:240px; margin:0 auto;}
+.pinpad button{padding:14px; font-size:18px; font-family:var(--fm); border:1px solid var(--line-2); background:var(--surface); border-radius:9px;}
+.pinpad button:hover{background:var(--surface-2);}
+.pindots{display:flex; gap:10px; justify-content:center; margin:14px 0 16px;}
+.pindots i{width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);display:block;}
+.pindots i.on{background:var(--brand); border-color:var(--brand);}
+
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:24px; z-index:200;
+  background:var(--ink); color:var(--plane); padding:12px 18px; border-radius:10px;
+  font-size:14px; box-shadow:var(--shadow-lg); display:flex; align-items:center; gap:9px;
+  animation:rise .2s ease-out;
+}
+:root[data-theme="dark"] .toast{background:var(--surface-3); color:var(--ink);}
+
+.tabs{display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:18px; overflow-x:auto;}
+.tabs button{border:0; background:transparent; padding:10px 14px; font-size:14px; color:var(--ink-2); border-bottom:2px solid transparent; white-space:nowrap; font-weight:500;}
+.tabs button[aria-selected="true"]{color:var(--brand); border-bottom-color:var(--brand); font-weight:600;}
+:root[data-theme="dark"] .tabs button[aria-selected="true"]{color:var(--brand-2); border-bottom-color:var(--brand-2);}
+
+.machgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px;}
+.mach{text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:14px; box-shadow:var(--shadow); width:100%;}
+.mach:hover{border-color:var(--line-2); transform:translateY(-1px);}
+.mach .t{display:flex; align-items:center; gap:8px; margin-bottom:9px;}
+.mach .nm{font-size:15.5px; font-weight:600; margin:0 0 3px;}
+.mach .ln{font-size:12.5px; color:var(--ink-2);}
+.mach .ft{display:flex; gap:8px; margin-top:11px; padding-top:11px; border-top:1px solid var(--line); font-size:12px; color:var(--ink-2);}
+
+.chartcard .bd{padding:16px 16px 8px;}
+svg.chart{display:block; width:100%; height:auto; overflow:visible;}
+svg.chart text{font-family:var(--ff); fill:var(--ink-3); font-size:11px;}
+svg.chart text.val{fill:var(--ink-2); font-family:var(--fm); font-size:10.5px;}
+svg.chart .gl{stroke:var(--grid); stroke-width:1;}
+svg.chart .ax{stroke:var(--axis); stroke-width:1;}
+
+.footnote{font-size:12px; color:var(--ink-3); margin-top:18px; line-height:1.55;}
+.stack{display:flex; flex-direction:column; gap:14px;}
+.rowsplit{display:flex; gap:12px; flex-wrap:wrap;}
+.hide-sm{display:none;}
+@media (min-width:900px){ .hide-sm{display:flex;} }
+@media (max-width:820px){ .rail{display:none;} }
+.mobnav{display:flex; gap:2px; padding:6px 8px; background:var(--surface); border-top:1px solid var(--line); position:sticky; bottom:0; z-index:30;}
+.mobnav button{flex:1; border:0; background:transparent; padding:8px 4px; font-size:11px; color:var(--ink-2); border-radius:8px; display:flex; flex-direction:column; align-items:center; gap:3px;}
+.mobnav button[aria-current="true"]{color:var(--brand); background:var(--wash); font-weight:600;}
+@media (min-width:821px){ .mobnav{display:none;} }
+
+.emptystate{text-align:center;padding:44px 24px;color:var(--ink-2);}
+.emptystate h3{margin:0 0 6px;font-size:16px;color:var(--ink);font-weight:600;}
+.emptystate p{margin:0 auto 16px;max-width:46ch;font-size:13.5px;line-height:1.55;}
+.chiprow{display:flex;gap:8px;flex-wrap:wrap;}
+.chipdel{display:inline-flex;align-items:center;gap:7px;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:5px 8px 5px 11px;font-size:13px;}
+.chipdel button{border:0;background:transparent;color:var(--ink-3);padding:2px 3px;border-radius:4px;line-height:1;}
+.chipdel button:hover{background:var(--crit-bg);color:var(--crit-ink);}
+.linelist{display:flex;flex-direction:column;gap:7px;}
+.lineitem{display:flex;align-items:center;gap:9px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;}
+.lineitem .n{font-family:var(--fm);font-size:11.5px;color:var(--ink-3);width:20px;flex:none;}
+.lineitem input{border:0;background:transparent;padding:2px 0;font-size:14px;}
+.lineitem input:focus{box-shadow:none;border-bottom:1px solid var(--brand-2);border-radius:0;}
+.sync[data-s="saving"] i{background:var(--warn-dot);} .sync[data-s="ok"] i{background:var(--ok-dot);}
+.sync[data-s="err"] i{background:var(--crit-dot);} .sync[data-s="ro"] i{background:var(--neut-dot);}
+.banner{padding:10px 16px;font-size:13px;display:flex;gap:9px;align-items:center;justify-content:center;}
+.banner.ro{background:var(--warn-bg);color:var(--warn-ink);}
+
+#gate{position:fixed;inset:0;z-index:300;background:var(--plane);display:flex;align-items:center;justify-content:center;padding:22px;overflow-y:auto;}
+#gate[hidden]{display:none;}
+.gatebox{width:100%;max-width:430px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lg);padding:28px;}
+.gatebox .mark{display:flex;align-items:center;gap:10px;color:var(--brand);font-weight:600;margin-bottom:20px;}
+.gatebox h1{font-size:20px;margin:0 0 6px;}
+.gatebox .lead{color:var(--ink-2);font-size:13.5px;line-height:1.55;margin:0 0 20px;}
+.gateerr{background:var(--crit-bg);color:var(--crit-ink);border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:16px;line-height:1.45;}
+.userchip{display:flex;align-items:center;gap:9px;font-size:13px;background:rgba(255,255,255,.12);padding:5px 6px 5px 12px;border-radius:999px;white-space:nowrap;}
+:root[data-theme="dark"] .userchip{background:rgba(255,255,255,.07);}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .userchip{background:rgba(255,255,255,.07);} }
+.userchip button{border:0;background:transparent;color:inherit;opacity:.75;font-size:12.5px;padding:3px 9px;border-radius:999px;}
+.userchip button:hover{opacity:1;background:rgba(255,255,255,.14);}
+.fotogrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.fotogrid figure{margin:0;}
+.fotogrid img{width:100%;border-radius:9px;display:block;border:1px solid var(--line);}
+.fotogrid figcaption{font-family:var(--fm);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:6px;}
+
+.chartcard .bd{padding:16px 16px 8px;}
+svg.chart{display:block;width:100%;height:auto;overflow:visible;}
+svg.chart text{font-family:var(--ff);fill:var(--ink-3);font-size:11px;}
+svg.chart text.val{fill:var(--ink-2);font-family:var(--fm);font-size:10.5px;}
+svg.chart .gl{stroke:var(--grid);stroke-width:1;}
+svg.chart .ax{stroke:var(--axis);stroke-width:1;}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-bottom:14px;}
+.legend span{display:flex;align-items:center;gap:6px;}
+.legend i{width:10px;height:10px;border-radius:3px;display:block;}
+</style>
+
+<script type="application/json" id="db">{"meta":{"v":1,"updated":"","by":""},"grupos":["Producción","Embolsado","Almacén","Servicios generales","Logística"],"personas":[{"n":"R. Carrión","r":"Responsable de planta"},{"n":"Ana G.","r":"Encargada de planta"},{"n":"Paco M.","r":"Mantenimiento"},{"n":"Iván R.","r":"Mantenimiento"}],"historial":[],"averias":[{"id":"26082601","mid":"TOR","desc":"Plástico fundido en uno de los 24 bornes del torito «Crown» — humo y olor","cons":"Indisponible desde las 10:30. Puede seguir funcionando bajo riesgo de desencadenar un problema mayor. Actualmente parado.","abierta":true,"fecha":"2026-08-26","sol":"R. Carrión","paro":2.5,"rep":0}],"maquinas":[{"id":"E22","nombre":"Enfajadora TFCP-30/15","grupo":"Embolsado","ubic":"Línea de envasado 2","resp":"R. Carrión","fab":"Technofoam","modelo":"TFCP-30/15","serie":"52/2024","anio":"2024","crit":"A","doc":"F1/P-07 Rev. 04","reglas":{"loto":true,"vb":true,"epi":"Guantes anticorte, gafas y calzado de seguridad","avisos":["Nunca aire comprimido. El soplado empuja el polvo abrasivo hacia patines, rodamientos, electroválvulas y armario. Solo aspiración industrial.","Limpiar antes de lubricar. Grasa sobre polvo abrasivo forma una pasta que raya guías y destroza retenes. Grasa aprobada: SKF LGWA 2.","Máquina no liberada a producción normal: quedan bloques de aceptación abiertos (auditoría v1.0 del 25/08/2026)."]},"horas":{"tiene":false,"acum":1240,"semana":40,"act":"2026-08-24","gobierno":"Ambos — lo que ocurra antes"},"tareas":[{"id":"E22-1","nombre":"Prearranque diario","perfil":"Operador","unidad":"Días laborables","cada":1,"min":10,"parada":false,"fotos":"No hacen falta","rep":"","last":"2026-08-26","desc":"Repaso de arranque antes de empezar a producir. Si algo no está conforme, no se arranca.","checks":["Protecciones y carenados en su sitio","Sin alarmas activas en la HMI","Presión de red correcta","Ventosas de los 3 cabezales en estado","Guías limpias de polvo — aspirar si hace falta","Hot-melt: nivel y estado","Altura de producto 72–74 mm comprobada con galga"],"medidas":[{"n":"Temperatura del armario","u":"°C","min":0,"max":40},{"n":"Presión de red","u":"bar","min":5.5,"max":7},{"n":"Altura de tres esponjas","u":"mm","min":72,"max":74}]},{"id":"E22-2","nombre":"Revisión semanal","perfil":"Mantenimiento","unidad":"Semanas","cada":1,"cadaH":40,"min":95,"parada":true,"fotos":"Antes y después","rep":"SKF LGWA 2","last":"2026-08-12","desc":"Bloque semanal completo. Aspirar siempre antes de lubricar.","checks":["Filtro del armario eléctrico limpio o sustituido","Electroválvulas revisadas","Vacío comprobado en los 3 cabezales","Fugas neumáticas: ninguna","Guías y patines limpios y lubricados (SKF LGWA 2)","Excéntrico: carro, guías y pivotes","Cadenas y empujadores","Sensores y fotocélulas","Cintas de arrastre y extracción"],"medidas":[{"n":"Vacío cabezal 1","u":"mbar","min":-700,"max":-400},{"n":"Vacío cabezal 2","u":"mbar","min":-700,"max":-400},{"n":"Vacío cabezal 3","u":"mbar","min":-700,"max":-400},{"n":"Juego del excéntrico","u":"mm","min":0,"max":0.3}]},{"id":"E22-3","nombre":"Revisión de 100 h","perfil":"Mantenimiento","unidad":"Semanas","cada":2,"cadaH":100,"min":75,"parada":true,"fotos":"Antes y después","rep":"","last":"2026-07-29","desc":"Geometría y transmisión. Medir siempre entre las mismas referencias y con útil rígido.","checks":["Preventivo completo del manual","Los 11 pasos de empujador medidos","Ninguna medida alcanza 385 mm","Fase izquierda/derecha dentro del límite provisional","Tensión y flecha de cadena anotadas","Piñones: sin diente en gancho ni chaveta floja","Corriente y par de servos comparados con el baseline"],"medidas":[{"n":"Paso entre empujadores (máximo de los 11)","u":"mm","min":379,"max":383},{"n":"Desfase de fase L/R","u":"mm","min":0,"max":2},{"n":"Corriente del servo en carga","u":"A","min":0,"max":0}]},{"id":"E22-4","nombre":"Inspección mensual detallada","perfil":"Mantenimiento","unidad":"Meses","cada":1,"min":120,"parada":true,"fotos":"Antes y después","rep":"","last":"2026-07-29","desc":"Inspección obligatoria con medición. La firma el responsable de mantenimiento.","checks":["Geometría verificada en entrada, centro y salida","Juego de la guía LLTHC medido","Condición de rodamientos: ruido, temperatura y vibración","Armario eléctrico: limpieza y temperatura","Backups de PLC, HMI, recetas y drives","Equipo de hot-melt","Pareto de las alarmas del mes"],"medidas":[{"n":"Juego de la guía LLTHC","u":"mm","min":0,"max":0.2},{"n":"Temperatura máxima del armario en el mes","u":"°C","min":0,"max":45}]},{"id":"E22-5","nombre":"Relubricación de los 5 puntos OEM","perfil":"Mantenimiento","unidad":"Horas de trabajo","cada":300,"min":60,"parada":true,"fotos":"Antes y después","rep":"SKF LGWA 2","last":"2026-06-15","lastH":900,"desc":"El manual fija 3.000 h, pero indica reducir un 90 % en ambiente contaminado. Por eso el plan arranca en 300 h y se ajusta con evidencia.","checks":["Limpiar por aspiración antes de engrasar","FYTB 20 TF (unidad 1)","FYTB 20 TF (unidad 2)","FYTB 17 TF","Maedler 64672006","Maedler 62655025","Sin sobreengrase — retirar el exceso"],"medidas":[]},{"id":"E22-6","nombre":"Revisión eléctrica trimestral","perfil":"Electricista / PRL","unidad":"Meses","cada":3,"min":180,"parada":true,"fotos":"Antes y después","rep":"","last":"2026-06-10","desc":"La ejecuta electricista con validación de PRL. Deja acta firmada.","checks":["Termografía en carga","Par de conexiones con pintura testigo","Validación completa de la cadena de seguridad, sin bypass","Ventiladores y fuente de 24 V","Sin decoloración en conexiones"],"medidas":[{"n":"Punto más caliente en termografía","u":"°C","min":0,"max":60}]},{"id":"E22-7","nombre":"Revisión mayor semestral","perfil":"Especialista externo","unidad":"Meses","cada":6,"cadaH":1000,"min":480,"parada":true,"fotos":"Antes y después","rep":"","last":"2026-02-16","desc":"Revisión profunda. Se aprovecha una parada programada.","checks":["Filtros de hot-melt","Depósito de hot-melt por condición","Climatización del armario","Revisión mayor del circuito de vacío","Cadenas","Plásticos sacrificiales y límites de desgaste","Estructura y fijaciones"],"medidas":[]}],"repuestos":[{"ref":"P0","name":"Guía + patín LLTHC exactos","stock":0,"min":1,"prov":"Technofoam","plazo":45,"nota":"No admitir equivalencia visual. Validar carga, tamaño y geometría."},{"ref":"P0","name":"Conjunto excéntrico completo","stock":0,"min":1,"prov":"Technofoam","plazo":45,"nota":"Guías, patines, plásticos, pivotes y rótula."},{"ref":"P0","name":"Cadenas + uniones (juego completo)","stock":0,"min":1,"prov":"Pendiente de BOM","plazo":30,"nota":"Referencia y longitud OEM. Revisar piñones antes de montar."},{"ref":"P0","name":"Guías plásticas y porta-palas","stock":1,"min":2,"prov":"Pendiente de plano","plazo":30,"nota":"Material, plano y límite de desgaste."},{"ref":"P0","name":"Ventosas y electroválvulas","stock":1,"min":2,"prov":"—","plazo":15,"nota":"2 juegos y 2 válvulas por tipo."},{"ref":"P0","name":"Cinta de extracción","stock":1,"min":1,"prov":"—","plazo":20,"nota":"Sustitución inmediata."},{"ref":"P1","name":"Sensores inductivos, fotoeléctricos y reed","stock":2,"min":1,"prov":"—","plazo":7,"nota":"Confirmar PNP/NO, alcance, conector y referencia."},{"ref":"P1","name":"Rodamientos FYTB / Maedler","stock":1,"min":2,"prov":"—","plazo":10,"nota":"Referencias del manual."},{"ref":"P1","name":"Variador LXM32SD12N4 / ATV320U04N4B","stock":0,"min":1,"prov":"Schneider","plazo":21,"nota":"Solo con backup y compatibilidad confirmada."},{"ref":"P1","name":"Filtros Micron+ y juntas","stock":2,"min":2,"prov":"Focke Meler","plazo":14,"nota":"Bomba 50 mesh y admisión. 2 servicios."},{"ref":"C","name":"Grasa SKF LGWA 2","stock":2,"min":2,"prov":"—","plazo":5,"nota":"Única grasa aprobada para rodamientos Y y guías lineales."}],"lubri":[{"p":"5 rodamientos OEM","c":"FYTB 20 TF ×2 · FYTB 17 TF · Maedler 64672006 · 62655025","pr":"SKF LGWA 2","f":"300 h inicial","w":"Dosis por referencia. No sobreengrasar."},{"p":"Guía / patín LLTHC","c":"Empujador","pr":"SKF LGWA 2","f":"Semanal / 40 h","w":"Limpiar antes, película fina, mover toda la carrera."},{"p":"Guías planetario","c":"Posicionamiento de cabezal","pr":"SKF LGWA 2","f":"Semanal / 100 h","w":"Retenes y protección contra polvo."},{"p":"Excéntrico","c":"Carro, guías y pivotes","pr":"LGWA 2 u OEM","f":"Semanal / 40 h","w":"Cantidad controlada y medida de juego."},{"p":"Cadenas","c":"Pasadores y casquillos","pr":"Aceite de cadena aprobado","f":"Semanal / condición","w":"Gota dirigida, retirar exceso. La grasa espesa atrapa polvo."},{"p":"Rodamientos sellados","c":"Resto del equipo","pr":"Ninguno","f":"Por condición","w":"No relubricar. Vigilar ruido, temperatura y vibración."}],"acciones":[{"n":1,"lvl":"P0","t":"Sustituir guía y patín LLTHC","est":"pendiente","own":"Mantenimiento","note":"La pieza gripada y limpiada es una contención, no una reparación."},{"n":2,"lvl":"P0","t":"Rehacer conjunto excéntrico y medir juego y carrera","est":"pendiente","own":"Mantenimiento","note":"Punto de medida con reloj comparador + 2 h en vacío."},{"n":3,"lvl":"P0","t":"Auditar cadena, piñones, guías y fase como sistema","est":"curso","own":"Mantenimiento","note":"385 mm medidos frente a 381 nominales — 1,05 % de elongación, 44 mm acumulados."},{"n":4,"lvl":"P0","t":"Eliminar tornillo que atraviesa la corredera","est":"hecha","own":"Mantenimiento","note":"Fijación rediseñada y enrasada."},{"n":5,"lvl":"P0","t":"Restituir cota de las guías desplazadas 5 mm","est":"pendiente","own":"Ingeniería","note":"Emitir plano as-built."},{"n":6,"lvl":"P0","t":"Validar el desnivel de 5 mm entre trenes cinemáticos","est":"pendiente","own":"Technofoam","note":"Medir en entrada, centro y salida."},{"n":7,"lvl":"P0","t":"Sustituir porta-palas y empujadores fuera de condición","est":"pendiente","own":"Mantenimiento","note":"Rediseñar zapata sacrificial reemplazable."},{"n":8,"lvl":"P0","t":"Vacío: 100 ciclos por cabeza y antiaflojamiento","est":"curso","own":"Mantenimiento","note":"Fallo en 1 de los 3 cabezales."},{"n":9,"lvl":"P0","t":"Climatización cerrada del armario y alarma de temperatura","est":"pendiente","own":"Ingeniería","note":"Objetivo ≤ 40 °C. Aviso a 45 °C."},{"n":10,"lvl":"P0","t":"Sustituir la cinta de extracción","est":"pendiente","own":"Mantenimiento","note":"Sustitución inmediata."},{"n":11,"lvl":"P1","t":"Documentar dados, soplador, presión y recetas","est":"pendiente","own":"Producción","note":"Expediente de cambio y evaluación de riesgo."},{"n":12,"lvl":"P1","t":"Fabricar galga 72–74 mm y control de lote","est":"curso","own":"Calidad","note":"Altura de tres esponjas."},{"n":13,"lvl":"P1","t":"Comprar stock crítico P0 y exigir BOM a Technofoam","est":"pendiente","own":"Compras","note":"Sin repuesto, las piezas sacrificiales se usan hasta romper."},{"n":14,"lvl":"P1","t":"Proteger guías con rascadores o fuelles","est":"pendiente","own":"Ingeniería","note":"Proteger del contaminante es mejor que engrasar más a menudo."},{"n":15,"lvl":"P2","t":"Rediseñar porta-palas con zapata estándar","est":"pendiente","own":"Ingeniería","note":"Horizonte de 60 a 90 días."},{"n":16,"lvl":"P2","t":"Backup de PLC, HMI, recetas y drives","est":"pendiente","own":"Automatización","note":"Con control de cambios."},{"n":17,"lvl":"P2","t":"Instalar contador de horas y diagnóstico de vacío en HMI","est":"pendiente","own":"Automatización","note":"Hoy las horas se estiman. Un contador real haría exacto el plan por horas."},{"n":18,"lvl":"P2","t":"Revisión mensual de Pareto de alarmas, MTBF y MTTR","est":"pendiente","own":"Mantenimiento","note":"Gobierno del plan."}],"liberacion":[{"b":"Seguridad","c":"100 % de puertas, paros, relé y rearme funcionales; sin bypass.","e":"Acta firmada por PRL / automatización","ok":true},{"b":"Geometría","c":"Sin interferencias; altura y fase de trenes verificadas en entrada, centro y salida.","e":"Protocolo dimensional y plano as-built","ok":false},{"b":"Cadenas","c":"Todos los campos en baseline aprobado; ninguna medida de 385 mm.","e":"Tabla de 11 campos + fotos del útil","ok":false},{"b":"Guía LLTHC","c":"Carrera completa suave, sin gripado, rayas ni juego creciente.","e":"Medida de juego y corriente","ok":false},{"b":"Excéntrico","c":"Sin golpe, agarrotamiento, plástico roto ni holgura anormal.","e":"Reloj comparador + 2 h en vacío","ok":false},{"b":"Vacío","c":"Cero fallos en 100 ciclos en cada una de las tres cabezas.","e":"Registro de vacío y ciclos","ok":false},{"b":"Neumática","c":"Presión estable en ciclo; sin fugas; soplador regulado y documentado.","e":"Valores en reposo y en producción","ok":true},{"b":"Eléctrico","c":"Armario limpio; temperatura interior ≤ 40 °C; sin alarmas ni derating.","e":"Registro térmico de turno completo","ok":false},{"b":"Producto","c":"Altura de tres esponjas 72–74 mm y funda/dado correctos.","e":"Galga y control de lote","ok":true},{"b":"Prueba final","c":"2 h en vacío + 4 h a velocidad objetivo; cero colisiones ni alarma repetitiva.","e":"Informe de SAT interno firmado","ok":false}]},{"id":"TOR","nombre":"Torito Crown","grupo":"Logística","ubic":"Almacén","resp":"R. Carrión","fab":"Crown","modelo":"—","serie":"41731","anio":"","crit":"B","doc":"—","reglas":{"loto":true,"vb":false,"epi":"Calzado de seguridad y guantes","avisos":[]},"horas":{"tiene":true,"acum":0,"semana":20,"act":"2026-08-26","gobierno":"Solo horas de trabajo"},"tareas":[],"repuestos":[],"lubri":[],"acciones":[],"liberacion":[]}]}</script>
+
+<div id="gate" hidden></div>
+
+<div class="shell" hidden>
+  <div id="banner"></div>
+  <div class="topbar">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2.6 3.4 7.2v9.6L12 21.4l8.6-4.6V7.2L12 2.6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+      <span style="opacity:1"><b>DORDIV</b> <span>Mantenimiento</span></span>
+    </div>
+    <div class="spacer"></div>
+    <div class="sync" id="syncChip" title="Estado de guardado"><i></i><span>Cargando…</span></div>
+    <div class="userchip" id="userChip" hidden></div>
+    <div class="roleswitch" id="roleSwitch" role="group" aria-label="Cambiar de vista" hidden>
+      <span class="demoTag hide-sm">Ver como</span>
+      <button data-role="mecanico" aria-pressed="true">Mecánico</button>
+      <button data-role="encargado" aria-pressed="false">Encargado</button>
+      <button data-role="direccion" aria-pressed="false">Dirección</button>
+    </div>
+  </div>
+
+  <div class="body">
+    <nav class="rail" id="rail" hidden></nav>
+    <main class="main"><div id="view"></div></main>
+  </div>
+  <nav class="mobnav" id="mobnav" hidden></nav>
+</div>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ══════════════ DATOS ══════════════ */
+let DB;
+try { DB = JSON.parse(document.getElementById("db").textContent || "{}"); } catch(e) { DB = {}; }
+if(!DB || !Array.isArray(DB.maquinas)) DB = {meta:{v:1}, grupos:["Producción"], personas:[], maquinas:[], historial:[], averias:[]};
+DB.historial = DB.historial || [];
+DB.averias   = DB.averias   || [];
+const byId = (id) => DB.maquinas.find(m => m.id === id);
+
+const UNIDADES = ["Días laborables","Semanas","Meses","Horas de trabajo"];
+const PERFILES = ["Operador","Mantenimiento","Electricista / PRL","Especialista externo"];
+const FOTOS    = ["Antes y después","Solo después","No hacen falta"];
+const MES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const DIAS = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+
+/* ══════════════ FECHAS Y PROGRAMACIÓN ══════════════ */
+function today(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
+function parseISO(s){ if(!s) return null; const p=String(s).split("-").map(Number); return p.length===3 ? new Date(p[0],p[1]-1,p[2]) : null; }
+function toISO(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function addWork(d,n){ let x=new Date(d),c=0; while(c<n){ x=addDays(x,1); const w=x.getDay(); if(w!==0&&w!==6) c++; } return x; }
+function fmtD(d){ return d ? d.getDate()+" "+MES[d.getMonth()] : "—"; }
+function fmtFull(d){ return d ? d.getDate()+" "+MES[d.getMonth()]+" "+d.getFullYear() : "—"; }
+function diffDays(a,b){ return Math.round((a-b)/86400000); }
+function semanaISO(d){ const t=new Date(d); t.setDate(t.getDate()+4-(t.getDay()||7)); const y=new Date(t.getFullYear(),0,1); return Math.ceil(((t-y)/86400000+1)/7); }
+
+function horasAcum(m){
+  const h = m.horas || {}; const base = +h.acum || 0; const d = parseISO(h.act);
+  if(!d || !h.semana) return base;
+  return Math.round(base + (+h.semana) * (Math.max(0, diffDays(today(), d)) / 7));
+}
+function proxima(m, t){
+  const hoy = today(), base = parseISO(t.last) || hoy;
+  const cands = [];
+  const cada = Math.max(1, +t.cada || 1);
+  if(t.unidad === "Días laborables") cands.push(addWork(base, cada));
+  else if(t.unidad === "Semanas")    cands.push(addDays(base, 7*cada));
+  else if(t.unidad === "Meses")      cands.push(addDays(base, Math.round(30.44*cada)));
+  else if(t.unidad === "Horas de trabajo"){
+    const hs = +((m.horas||{}).semana) || 0, ac = horasAcum(m);
+    const lh = (t.lastH != null) ? +t.lastH : ac;
+    const falta = cada - (ac - lh);
+    cands.push(hs > 0 ? addDays(hoy, Math.ceil(falta/(hs/7))) : addDays(hoy, 999));
+  }
+  if(t.cadaH){
+    const hs = +((m.horas||{}).semana) || 0, ac = horasAcum(m);
+    const lh = (t.lastH != null) ? +t.lastH : ac;
+    const falta = (+t.cadaH) - (ac - lh);
+    if(hs > 0) cands.push(addDays(hoy, Math.ceil(falta/(hs/7))));
+  }
+  if(!cands.length) return hoy;
+  return new Date(Math.min.apply(null, cands));
+}
+function estadoTarea(m,t){
+  const d = diffDays(proxima(m,t), today());
+  return {due: proxima(m,t), d, st: d < 0 ? "vencida" : d === 0 ? "hoy" : d <= 7 ? "proxima" : "futura"};
+}
+function agenda(){
+  const out = [];
+  DB.maquinas.forEach(m => (m.tareas||[]).forEach(t => {
+    const e = estadoTarea(m,t);
+    if(e.st !== "futura") out.push({m, t, ...e});
+  }));
+  const rank = {vencida:0, hoy:1, proxima:2};
+  return out.sort((a,b) => rank[a.st]-rank[b.st] || a.d-b.d || (b.m.crit==="A") - (a.m.crit==="A"));
+}
+function freqTexto(t){
+  const u = (t.unidad||"").toLowerCase();
+  const n = +t.cada || 1;
+  let s = t.unidad === "Días laborables" ? (n===1 ? "diario" : `cada ${n} días laborables`)
+        : t.unidad === "Semanas"         ? (n===1 ? "semanal" : `cada ${n} semanas`)
+        : t.unidad === "Meses"           ? (n===1 ? "mensual" : n===3 ? "trimestral" : n===6 ? "semestral" : n===12 ? "anual" : `cada ${n} meses`)
+        : `cada ${n} h`;
+  if(t.cadaH) s += ` / ${nfmt(t.cadaH)} h`;
+  return s;
+}
+function cargaSemanal(m){
+  return (m.tareas||[]).reduce((s,t) => {
+    const c = Math.max(1, +t.cada||1), hs = +((m.horas||{}).semana)||0;
+    const v = t.unidad==="Días laborables" ? 5/c : t.unidad==="Semanas" ? 1/c
+            : t.unidad==="Meses" ? 1/(4.33*c) : (hs/c);
+    return s + v*(+t.min||0);
+  }, 0);
+}
+
+/* ══════════════ UTILES ══════════════ */
+const $ = (s,r=document) => r.querySelector(s);
+const el = (h) => { const t=document.createElement("template"); t.innerHTML=h.trim(); return t.content.firstElementChild; };
+const esc = (s) => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const nfmt = (n,d=0) => { const p=Math.abs(+n||0).toFixed(d).split("."); return (n<0?"−":"")+p[0].replace(/\B(?=(\d{3})+(?!\d))/g,".")+(p[1]?","+p[1]:""); };
+const hm = (m) => { m=Math.round(m); return m>=60 ? `${Math.floor(m/60)} h${m%60?" "+(m%60)+" min":""}` : `${m} min`; };
+const uid = (p) => p + "-" + Math.random().toString(36).slice(2,7);
+
+function toast(msg){
+  const r = $("#toastRoot"); r.innerHTML = "";
+  r.appendChild(el(`<div class="toast"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="m4 12.5 5 5L20 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>${esc(msg)}</span></div>`));
+  setTimeout(()=>{ r.innerHTML=""; }, 3600);
+}
+const ICON = {
+  chevron:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="m9 5 7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  camera:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.1-2h8.4l1.1 2h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.6"/></svg>',
+  warn:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 4.5 21 19H3l9-14.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1" fill="currentColor"/></svg>',
+  info:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.9" r="1.05" fill="currentColor"/></svg>',
+  qr:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="8" y="8" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.6"/></svg>',
+  bolt:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M13 3 5 13.5h5.5L10 21l8-10.5h-5.5L13 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  plus:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+};
+const critPill = (c) => `<span class="code crit-${c||"C"}" title="Criticidad ${c||"C"}">${c||"C"}</span>`;
+const freqPill = (s) => {
+  const x = String(s).toLowerCase();
+  const cls = x.startsWith("p0") ? "crit" : /\bh\b|\sh$|\/\s*\d/.test(x) ? "warn"
+            : /anual|semestral|trimestral/.test(x) ? "info" : "neut";
+  return `<span class="pill ${cls}"><i></i>${esc(s)}</span>`;
+};
+
+/* ══════════════ CONEXIÓN, SESIÓN Y GUARDADO ══════════════ */
+/* Configuración del servidor. Si se rellena aquí, nadie tiene que escribirla. */
+const CFG_INTEGRADA = {url:"https://rwpywrohfnifkunjfrov.supabase.co", key:"sb_publishable_uYQ_5iQqZ3ee3gOAqtS1IQ_JuQluUUG"};
+
+const K_CFG = "dordiv.cfg", K_SES = "dordiv.ses";
+let CFG=null, SES=null, PERFIL=null, VER=0, SAVING=false, CAN=false;
+const SEMILLA = JSON.parse(JSON.stringify(DB));
+
+try{ CFG = JSON.parse(localStorage.getItem(K_CFG) || "null"); }catch(e){}
+try{ SES = JSON.parse(localStorage.getItem(K_SES) || "null"); }catch(e){}
+if(CFG_INTEGRADA.url && CFG_INTEGRADA.key) CFG = CFG_INTEGRADA;
+
+const base = () => String(CFG.url||"").replace(/\/+$/,"");
+function guardaCfg(c){ CFG=c; try{ localStorage.setItem(K_CFG, JSON.stringify(c)); }catch(e){} }
+function guardaSes(s){ SES=s; try{ s ? localStorage.setItem(K_SES, JSON.stringify(s)) : localStorage.removeItem(K_SES); }catch(e){} }
+function H(json, auth){
+  if(auth===undefined) auth = true;
+  const h = {apikey: CFG.key};
+  if(auth && SES && SES.access_token) h.Authorization = "Bearer " + SES.access_token;
+  if(json) h["Content-Type"] = "application/json";
+  return h;
+}
+function setSync(s, txt){
+  const c = document.getElementById("syncChip"); if(!c) return;
+  c.hidden = false; c.dataset.s = s; c.querySelector("span").textContent = txt;
+}
+async function refrescar(){
+  if(!SES || !SES.refresh_token) return false;
+  try{
+    const r = await fetch(base()+"/auth/v1/token?grant_type=refresh_token",
+      {method:"POST", headers:{apikey:CFG.key,"Content-Type":"application/json"},
+       body: JSON.stringify({refresh_token: SES.refresh_token})});
+    if(!r.ok) return false;
+    guardaSes(await r.json()); return true;
+  }catch(e){ return false; }
+}
+async function rest(path, opts, reintenta){
+  opts = opts || {};
+  const r = await fetch(base()+path, opts);
+  if(r.status===401 && reintenta!==false && await refrescar()){
+    opts.headers = Object.assign({}, opts.headers, {Authorization:"Bearer "+SES.access_token});
+    return rest(path, opts, false);
+  }
+  return r;
+}
+async function entrar(email, pass){
+  const r = await fetch(base()+"/auth/v1/token?grant_type=password",
+    {method:"POST", headers:{apikey:CFG.key,"Content-Type":"application/json"},
+     body: JSON.stringify({email:email, password:pass})});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error_description || j.msg || j.message || "Usuario o contraseña incorrectos.");
+  guardaSes(j);
+}
+function salir(){ guardaSes(null); location.reload(); }
+
+async function cargarPerfil(){
+  const r = await rest("/rest/v1/perfiles?select=nombre,rol&limit=1", {headers:H()});
+  if(!r.ok) throw new Error("No se ha podido leer tu perfil ("+r.status+"). ¿Está creada la tabla «perfiles»?");
+  const j = await r.json();
+  return j[0] || null;
+}
+async function cargarEstado(){
+  const r = await rest("/rest/v1/estado?id=eq.1&select=datos,version", {headers:H()});
+  if(!r.ok) throw new Error("No se ha podido leer la base de datos ("+r.status+"). Revisa que el esquema esté instalado.");
+  const j = await r.json();
+  if(j.length){ DB = j[0].datos || {}; VER = j[0].version || 0; }
+  else {
+    const c = await rest("/rest/v1/estado", {method:"POST",
+      headers: Object.assign(H(true), {Prefer:"return=representation"}),
+      body: JSON.stringify({id:1, datos:SEMILLA, version:0})});
+    if(c.ok){ const k = await c.json(); DB = k[0].datos; VER = k[0].version; }
+    else { DB = SEMILLA; VER = 0; }
+  }
+  DB.maquinas  = DB.maquinas  || [];
+  DB.historial = DB.historial || [];
+  DB.averias   = DB.averias   || [];
+  DB.grupos    = DB.grupos    || ["Producción"];
+  DB.personas  = DB.personas  || [];
+  DB.ajustes   = DB.ajustes   || {tarifaHora:0, costeParoHora:0};
+}
+async function guardar(msg){
+  if(SAVING) return false;
+  if(!CAN){ toast("Tu usuario solo puede consultar, no editar."); return false; }
+  SAVING = true; setSync("saving","Guardando…");
+  DB.meta = DB.meta || {}; DB.meta.updated = toISO(today());
+  try{
+    const r = await rest("/rest/v1/estado?id=eq.1&version=eq."+VER, {method:"PATCH",
+      headers: Object.assign(H(true), {Prefer:"return=representation"}),
+      body: JSON.stringify({datos:DB, version:VER+1, actualizado_por:(PERFIL&&PERFIL.nombre)||"", actualizado:new Date().toISOString()})});
+    if(!r.ok){ SAVING=false; setSync("err","Error"); toast("No se ha podido guardar ("+r.status+")."); return false; }
+    const j = await r.json();
+    if(!j.length){
+      SAVING=false; setSync("err","Conflicto");
+      toast("Otra persona ha guardado mientras editabas. Recargando con su versión…");
+      setTimeout(()=>location.reload(), 2200); return false;
+    }
+    VER = j[0].version; SAVING=false; setSync("ok","Guardado");
+    if(msg) toast(msg);
+    return true;
+  }catch(e){
+    SAVING=false; setSync("err","Sin conexión");
+    toast("Sin conexión con el servidor. El cambio no se ha guardado — vuelve a intentarlo.");
+    return false;
+  }
+}
+
+/* ── Fotos ── */
+function comprimir(dataUrl, max, q){
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      let w = im.width, h = im.height;
+      if(Math.max(w,h) > max){ const f = max/Math.max(w,h); w = Math.round(w*f); h = Math.round(h*f); }
+      const c = document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(im,0,0,w,h);
+      res(c.toDataURL("image/jpeg", q||0.72));
+    };
+    im.onerror = () => res(dataUrl);
+    im.src = dataUrl;
+  });
+}
+async function subirFoto(ruta, dataUrl){
+  try{
+    const chico = await comprimir(dataUrl, 1400, 0.72);
+    const blob = await (await fetch(chico)).blob();
+    const r = await rest("/storage/v1/object/evidencias/"+ruta, {method:"POST",
+      headers: Object.assign(H(false), {"Content-Type": blob.type||"image/jpeg", "x-upsert":"true"}),
+      body: blob});
+    return r.ok ? ruta : null;
+  }catch(e){ return null; }
+}
+async function firmarFoto(ruta){
+  try{
+    const r = await rest("/storage/v1/object/sign/evidencias/"+ruta, {method:"POST",
+      headers:H(true), body: JSON.stringify({expiresIn:3600})});
+    if(!r.ok) return null;
+    const j = await r.json();
+    return base()+"/storage/v1"+(j.signedURL||j.signedUrl||"");
+  }catch(e){ return null; }
+}
+
+/* ── Pantallas de acceso ── */
+function gate(html){
+  const g = document.getElementById("gate"), sh = document.querySelector(".shell");
+  g.innerHTML = html || ""; g.hidden = !html; sh.hidden = !!html;
+}
+const marca = `<div class="mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+  <path d="M12 2.6 3.4 7.2v9.6L12 21.4l8.6-4.6V7.2L12 2.6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
+  <span>DORDIV · Mantenimiento</span></div>`;
+
+function pantallaConfig(err){
+  gate(`<div class="gatebox">${marca}
+    <h1>Conectar con el servidor</h1>
+    <p class="lead">Esta pantalla sale una sola vez. Pega los dos datos del proyecto de Supabase y quedan guardados en este dispositivo.</p>
+    ${err?`<div class="gateerr">${esc(err)}</div>`:""}
+    <div class="field"><label for="c_url">URL del proyecto</label>
+      <input type="text" id="c_url" placeholder="https://xxxxxxxx.supabase.co" value="${esc((CFG&&CFG.url)||"")}"></div>
+    <div class="field"><label for="c_key">Clave pública (anon)</label>
+      <input type="text" id="c_key" placeholder="eyJhbGciOi..." value="${esc((CFG&&CFG.key)||"")}"></div>
+    <button class="btn primary big" id="c_ok">Conectar</button>
+  </div>`);
+  document.getElementById("c_ok").onclick = () => {
+    const url = document.getElementById("c_url").value.trim(), key = document.getElementById("c_key").value.trim();
+    if(!url || !key){ pantallaConfig("Hacen falta los dos datos."); return; }
+    guardaCfg({url:url, key:key}); boot();
+  };
+}
+function pantallaLogin(err){
+  gate(`<div class="gatebox">${marca}
+    <h1>Entrar</h1>
+    <p class="lead">Usa el correo y la contraseña que te haya dado el responsable de mantenimiento.</p>
+    ${err?`<div class="gateerr">${esc(err)}</div>`:""}
+    <div class="field"><label for="l_mail">Correo</label><input type="email" id="l_mail" autocomplete="username"></div>
+    <div class="field"><label for="l_pass">Contraseña</label><input type="password" id="l_pass" autocomplete="current-password"></div>
+    <button class="btn primary big" id="l_ok">Entrar</button>
+    <div style="margin-top:16px;text-align:center"><button class="linkish" id="l_cfg">Cambiar de servidor</button></div>
+  </div>`);
+  const go = async () => {
+    const b = document.getElementById("l_ok"); b.disabled = true; b.textContent = "Entrando…";
+    try{
+      await entrar(document.getElementById("l_mail").value.trim(), document.getElementById("l_pass").value);
+      boot();
+    }catch(e){ pantallaLogin(e.message); }
+  };
+  document.getElementById("l_ok").onclick = go;
+  document.getElementById("l_pass").onkeydown = e => { if(e.key==="Enter") go(); };
+  document.getElementById("l_cfg").onclick = () => pantallaConfig();
+}
+function pintarUsuario(){
+  const c = document.getElementById("userChip");
+  const rol = {admin:"Administrador", mantenimiento:"Mantenimiento", encargado:"Encargado", direccion:"Dirección"}[PERFIL.rol] || PERFIL.rol;
+  c.hidden = false;
+  c.innerHTML = `<span><b>${esc(PERFIL.nombre)}</b> · ${esc(rol)}</span><button id="btnSalir">Salir</button>`;
+  document.getElementById("btnSalir").onclick = salir;
+  const rs = document.getElementById("roleSwitch");
+  rs.hidden = PERFIL.rol !== "admin";
+}
+async function boot(){
+  if(!CFG || !CFG.url || !CFG.key){ pantallaConfig(); return; }
+  if(!SES || !SES.access_token){ pantallaLogin(); return; }
+  try{
+    PERFIL = await cargarPerfil();
+    if(!PERFIL){ guardaSes(null); pantallaLogin("Tu usuario existe pero no tiene perfil. Pide al administrador que te dé de alta en la tabla de perfiles."); return; }
+    await cargarEstado();
+  }catch(e){
+    pantallaLogin(e.message || "No se ha podido conectar con el servidor.");
+    return;
+  }
+  CAN = ["admin","mantenimiento","encargado"].indexOf(PERFIL.rol) > -1;
+  state.role = PERFIL.rol === "direccion" ? "direccion" : PERFIL.rol === "mantenimiento" ? "mecanico" : "encargado";
+  state.view = state.role === "direccion" ? "cuadro" : "tareas";
+  gate("");
+  setSync("ok","Guardado");
+  pintarUsuario();
+  render();
+}
+
+/* ══════════════ ESTADO ══════════════ */
+const state = {role:"encargado", view:"tareas", mid:null, tab:"plan", modal:null, draft:null, alta:null, td:null};
+const NAV = {
+  mecanico:  [["tareas","Mis tareas"],["maquinas","Máquinas"],["averias","Averías"]],
+  encargado: [["tareas","Tareas"],["validaciones","Validaciones"],["maquinas","Máquinas"],["repuestos","Repuestos"],["averias","Averías"],["cuadro","Cuadro de mando"]],
+  direccion: [["cuadro","Cuadro de mando"],["maquinas","Máquinas"],["averias","Averías"],["repuestos","Repuestos"]],
+};
+const RO = () => state.role === "direccion" || !CAN;
+
+/* ══════════════ VISTA · TAREAS ══════════════ */
+function viewTareas(){
+  const ag = agenda();
+  const venc = ag.filter(x=>x.st==="vencida"), hoy = ag.filter(x=>x.st==="hoy"), prox = ag.filter(x=>x.st==="proxima");
+  const totalMin = venc.concat(hoy).reduce((s,x)=>s+(+x.t.min||0),0);
+  const pct = Math.min(100, Math.round(totalMin/480*100));
+  const d = today();
+  const hechasHoy = DB.historial.filter(h => h.fecha === toISO(d));
+
+  const card = (x) => {
+    const badge = x.st==="vencida" ? `<span class="pill crit"><i></i>Vencida hace ${-x.d} ${-x.d===1?"día":"días"}</span>`
+      : x.st==="hoy" ? `<span class="pill info"><i></i>Hoy</span>`
+      : `<span class="pill neut"><i></i>${fmtD(x.due)}</span>`;
+    return `<button class="task s-${x.st}" data-open="${x.m.id}|${x.t.id}">
+      <span class="stripe"></span>
+      <span class="in">
+        <span class="t1"><span class="code">${esc(x.m.id)}</span>${critPill(x.m.crit)}${badge}${x.t.parada?'<span class="pill warn"><i></i>Con parada</span>':""}</span>
+        <span class="name">${esc(x.t.nombre)}</span>
+        <span class="t2">
+          <span>${esc(x.m.nombre)}${x.m.ubic?" · "+esc(x.m.ubic):""}</span>
+          ${freqPill(freqTexto(x.t))}
+          <span class="mono">${hm(x.t.min)}</span>
+          <span>${esc(x.t.perfil||"")}</span>
+        </span>
+      </span>
+      <span class="go">${ICON.chevron}</span>
+    </button>`;
+  };
+  const grp = (title,items) => items.length ? `
+    <div class="group"><h2>${title}</h2><span class="n">${items.length}</span><hr></div>
+    <div class="tasks">${items.map(card).join("")}</div>` : "";
+
+  const sinPlan = DB.maquinas.filter(m => !(m.tareas||[]).length);
+
+  return `
+  <div class="wrap ${state.role==="mecanico"?"tab":""}">
+    <div class="daybar">
+      <div>
+        <p class="eyebrow">Semana ${semanaISO(d)} · ${d.getFullYear()}</p>
+        <div class="big">${DIAS[d.getDay()][0].toUpperCase()+DIAS[d.getDay()].slice(1)}, ${fmtFull(d)}</div>
+        <p class="sub">${state.role==="mecanico"?"Mantenimiento":state.role==="encargado"?"Encargado de planta":"Solo lectura"}</p>
+      </div>
+      <div class="spacer"></div>
+      <div class="load">
+        <div class="row"><span>Carga de hoy y atrasos</span><span class="mono">${hm(totalMin)} de 8 h</span></div>
+        <div class="track"><div class="fill ${pct>75?"hi":""}" style="width:${pct}%"></div></div>
+        ${pct>75?`<div class="reqline" style="color:var(--warn-ink)">${ICON.warn} Jornada muy cargada — conviene repartir</div>`:""}
+      </div>
+    </div>
+
+    ${venc.length?`<div class="note warn" style="margin-bottom:4px">${ICON.warn}<div><b>${venc.length} ${venc.length===1?"tarea vencida":"tareas vencidas"}.</b> Van siempre las primeras: cuentan como incumplimiento del plan.</div></div>`:""}
+
+    ${grp("Vencidas", venc)}
+    ${grp("Para hoy", hoy)}
+    ${grp("Próximos 7 días", prox)}
+
+    ${(!ag.length)?`<div class="card"><div class="emptystate">
+      <h3>No hay ninguna tarea programada</h3>
+      <p>Las tareas aparecen solas en cuanto una máquina tenga su plan cargado. ${sinPlan.length?`Ahora mismo hay ${sinPlan.length} ${sinPlan.length===1?"máquina":"máquinas"} sin plan.`:""}</p>
+      ${RO()?"":`<button class="btn primary" data-nav="maquinas">Ir a máquinas</button>`}
+    </div></div>`:""}
+
+    ${hechasHoy.length?`
+      <div class="group"><h2>Cerradas hoy</h2><span class="n">${hechasHoy.length}</span><hr></div>
+      <div class="tasks">${hechasHoy.map(h=>`<div class="task s-hecha"><span class="stripe"></span><span class="in">
+        <span class="t1"><span class="code">${esc(h.mid)}</span><span class="pill ${h.vb?"ok":"warn"}"><i></i>${h.vb?"Liberada":"Pendiente de visto bueno"}</span></span>
+        <span class="name">${esc(h.tarea)}</span>
+        <span class="t2"><span>${esc(h.por)} · ${esc(h.hora)}</span><span class="mono">${h.min} min</span>${h.prov?'<span class="pill warn"><i></i>Arreglo provisional</span>':""}</span>
+      </span></div>`).join("")}</div>`:""}
+
+    ${RO()?"":`<div class="quickrow">
+      <button class="btn" data-nav="maquinas">${ICON.qr} Máquinas</button>
+      <button class="btn" data-act="averia">${ICON.bolt} Solicitud de reparación</button>
+    </div>`}
+  </div>`;
+}
+
+/* ══════════════ VISTA · VALIDACIONES ══════════════ */
+function viewValidaciones(){
+  const pend = DB.historial.filter(h => h.needVB && !h.vb);
+  return `
+  <div class="wrap">
+    <div class="pagehead"><div><p class="eyebrow">Encargado de planta</p><h1>Validaciones pendientes</h1>
+      <p class="sub">Ningún equipo vuelve a producción sin visto bueno de limpieza.</p></div></div>
+    ${pend.length ? `<div class="tasks">${pend.map(h=>{
+      const m = byId(h.mid) || {nombre:h.mid, crit:"C"};
+      return `<button class="task s-hoy" data-vb="${h.id}"><span class="stripe"></span><span class="in">
+        <span class="t1"><span class="code">${esc(h.mid)}</span>${critPill(m.crit)}<span class="pill ok"><i></i>Parte cerrado ${esc(h.hora)}</span></span>
+        <span class="name">${esc(h.tarea)}</span>
+        <span class="t2"><span>${esc(m.nombre)} · realizado por ${esc(h.por)}</span><span class="mono">${h.min} min</span></span>
+      </span><span class="go">${ICON.chevron}</span></button>`;}).join("")}</div>`
+    : `<div class="card"><div class="emptystate"><h3>Nada pendiente de validar</h3>
+        <p>Cuando el mecánico cierre un parte de una máquina que exige visto bueno de limpieza, aparecerá aquí y no volverá a producción hasta que lo firmes.</p></div></div>`}
+  </div>`;
+}
+
+/* ══════════════ VISTA · MÁQUINAS ══════════════ */
+function viewMaquinas(){
+  return `
+  <div class="wrap">
+    <div class="pagehead">
+      <div><p class="eyebrow">Instalación</p><h1>Máquinas</h1>
+      <p class="sub">${DB.maquinas.length} ${DB.maquinas.length===1?"equipo":"equipos"} · ${DB.maquinas.reduce((s,m)=>s+(m.tareas||[]).length,0)} tareas de mantenimiento definidas</p></div>
+      <div class="spacer"></div>
+      <button class="btn" data-export title="Descargar una copia de seguridad de todo el plan">Exportar copia</button>
+      ${RO()?"":`<button class="btn primary" data-nav="alta">${ICON.plus} Dar de alta una máquina</button>`}
+    </div>
+    ${DB.maquinas.length ? `<div class="machgrid">
+      ${DB.maquinas.map(m=>{
+        const n = (m.tareas||[]).length;
+        const ag = (m.tareas||[]).map(t=>estadoTarea(m,t));
+        const venc = ag.filter(e=>e.st==="vencida").length;
+        return `<button class="mach" data-mach="${esc(m.id)}">
+          <span class="t"><span class="code">${esc(m.id)}</span>${critPill(m.crit)}</span>
+          <div class="nm">${esc(m.nombre)}</div>
+          <div class="ln">${esc(m.grupo||"")}${m.ubic?" · "+esc(m.ubic):""}</div>
+          <div class="ft"><span class="mono">${n} ${n===1?"tarea":"tareas"}</span><span style="margin-left:auto">${
+            !n ? '<span class="pill warn"><i></i>Sin plan</span>'
+            : venc ? `<span class="pill crit"><i></i>${venc} vencidas</span>`
+            : '<span class="pill ok"><i></i>Al día</span>'}</span></div>
+        </button>`;}).join("")}
+    </div>` : `<div class="card"><div class="emptystate"><h3>Todavía no hay máquinas</h3>
+        <p>Empieza dando de alta la primera. El asistente te va pidiendo los datos por fases y al final calcula la carga de trabajo que supone.</p>
+        ${RO()?"":`<button class="btn primary" data-nav="alta">Dar de alta una máquina</button>`}</div></div>`}
+  </div>`;
+}
+
+/* ══════════════ VISTA · FICHA DE MÁQUINA ══════════════ */
+function viewMaquina(){
+  const m = byId(state.mid);
+  if(!m) return `<div class="wrap"><p class="sub">Máquina no encontrada.</p></div>`;
+  const tabs = [["plan","Plan de mantenimiento"],["ficha","Ficha"],["reglas","Reglas y avisos"],["horas","Horas de trabajo"],["repuestos","Repuestos"],["hist","Histórico"]];
+  if((m.lubri||[]).length)      tabs.push(["lubri","Lubricación"]);
+  if((m.acciones||[]).length)   tabs.push(["acc","Recuperación"]);
+  if((m.liberacion||[]).length) tabs.push(["lib","Liberación"]);
+  const t = tabs.some(x=>x[0]===state.tab) ? state.tab : "plan";
+  const carga = cargaSemanal(m);
+  const libAb = (m.liberacion||[]).filter(l=>!l.ok).length;
+
+  let body = "";
+  if(t==="plan") body = tabPlan(m);
+  if(t==="ficha") body = tabFicha(m);
+  if(t==="reglas") body = tabReglas(m);
+  if(t==="horas") body = tabHoras(m);
+  if(t==="repuestos") body = tabRepuestos(m);
+  if(t==="hist") body = tabHist(m);
+  if(t==="lubri") body = tabLubri(m);
+  if(t==="acc") body = tabAcc(m);
+  if(t==="lib") body = tabLib(m);
+
+  return `
+  <div class="wrap">
+    <div class="pagehead">
+      <div>
+        <button class="btn ghost" data-nav="maquinas" style="margin-bottom:8px;padding:4px 8px">← Máquinas</button>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px;flex-wrap:wrap">
+          <span class="code" style="font-size:14px">${esc(m.id)}</span>${critPill(m.crit)}
+          ${libAb?`<span class="pill crit"><i></i>No liberada · ${libAb} bloques abiertos</span>`:""}
+        </div>
+        <h1>${esc(m.nombre)}</h1>
+        <p class="sub">${esc(m.grupo||"")}${m.ubic?" · "+esc(m.ubic):""}${m.serie?" · nº serie "+esc(m.serie):""}</p>
+      </div>
+      <div class="spacer"></div>
+      <div class="rowsplit">
+        <div class="kpi" style="min-width:145px"><div class="k">Horas de trabajo</div><div class="v">${nfmt(horasAcum(m))}<small> h</small></div><div class="d">${(m.horas||{}).tiene?"Horómetro":"Estimadas"}</div></div>
+        <div class="kpi" style="min-width:145px"><div class="k">Carga semanal</div><div class="v" style="font-size:24px">${hm(carga)}</div><div class="d">${(m.tareas||[]).length} tareas</div></div>
+      </div>
+    </div>
+    <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${t===k}" data-tab="${k}">${l}</button>`).join("")}</div>
+    ${body}
+  </div>`;
+}
+
+function tabPlan(m){
+  const ts = m.tareas || [];
+  return `
+    ${ts.length ? `<div class="card">
+      <div class="hd"><h2>Tareas del plan</h2><span class="sub">${ts.length}</span><div style="flex:1"></div>
+        ${RO()?"":`<button class="btn primary" data-newtask>${ICON.plus} Añadir tarea</button>`}</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Tarea</th><th>Frecuencia</th><th>Ejecuta</th><th class="num">Duración</th><th>Próxima</th><th style="width:110px"></th></tr></thead>
+        <tbody>${ts.map(t=>{
+          const e = estadoTarea(m,t);
+          return `<tr>
+            <td><b>${esc(t.nombre)}</b>
+              <div class="sub" style="font-size:12.5px">${(t.checks||[]).length} ${(t.checks||[]).length===1?"punto":"puntos"}${(t.medidas||[]).length?` · ${(t.medidas||[]).length} ${(t.medidas||[]).length===1?"medición":"mediciones"}`:""}${t.parada?" · requiere parada":""}</div></td>
+            <td>${freqPill(freqTexto(t))}</td>
+            <td class="sub">${esc(t.perfil||"")}</td>
+            <td class="num">${t.min} min</td>
+            <td>${e.st==="vencida"?`<span class="pill crit"><i></i>Vencida</span>`:e.st==="hoy"?`<span class="pill info"><i></i>Hoy</span>`:`<span class="sub mono">${fmtD(e.due)}</span>`}</td>
+            <td>${RO()?"":`<button class="btn ghost" data-edittask="${esc(t.id)}" style="padding:3px 8px">Editar</button>`}</td>
+          </tr>`;}).join("")}</tbody>
+      </table></div>
+    </div>
+    <div class="note" style="margin-top:14px">${ICON.info}<div>Carga preventiva de esta máquina: <b>${hm(cargaSemanal(m))} a la semana</b>. Es el número que hay que mirar antes de añadir tareas.</div></div>`
+    : `<div class="card"><div class="emptystate"><h3>Esta máquina no tiene plan todavía</h3>
+        <p>Añade sus tareas de mantenimiento con su frecuencia, su duración y sus puntos de comprobación. En cuanto haya una, empezará a aparecer sola en la pantalla del mecánico.</p>
+        ${RO()?"":`<button class="btn primary" data-newtask>${ICON.plus} Añadir la primera tarea</button>`}</div></div>`}`;
+}
+
+function tabFicha(m){
+  const f = (k,l,ph="") => `<div class="field"><label for="m_${k}">${l}</label><input type="text" id="m_${k}" data-m="${k}" value="${esc(m[k]||"")}" placeholder="${ph}" ${RO()?"disabled":""}></div>`;
+  return `<div class="card"><div class="bd">
+      <div class="rowsplit">
+        <div style="flex:1;min-width:140px">${f("id","Código")}</div>
+        <div style="flex:2;min-width:220px">${f("nombre","Nombre")}</div>
+      </div>
+      <div class="rowsplit">
+        <div style="flex:1;min-width:190px"><div class="field"><label for="m_grupo">Grupo</label>
+          <select id="m_grupo" data-m="grupo" ${RO()?"disabled":""}>${(DB.grupos||[]).map(g=>`<option ${g===m.grupo?"selected":""}>${esc(g)}</option>`).join("")}</select></div></div>
+        <div style="flex:1;min-width:190px">${f("ubic","Ubicación o línea")}</div>
+        <div style="flex:1;min-width:190px"><div class="field"><label for="m_resp">Responsable</label>
+          <select id="m_resp" data-m="resp" ${RO()?"disabled":""}>${(DB.personas||[]).map(p=>`<option ${p.n===m.resp?"selected":""}>${esc(p.n)}</option>`).join("")}</select></div></div>
+      </div>
+      <div class="rowsplit">
+        <div style="flex:1;min-width:150px">${f("fab","Fabricante")}</div>
+        <div style="flex:1;min-width:150px">${f("modelo","Modelo")}</div>
+        <div style="flex:1;min-width:130px">${f("serie","Nº de serie")}</div>
+        <div style="flex:1;min-width:110px">${f("anio","Año")}</div>
+      </div>
+      <div class="rowsplit">
+        <div style="flex:1;min-width:150px"><div class="field"><label for="m_crit">Criticidad</label>
+          <select id="m_crit" data-m="crit" ${RO()?"disabled":""}>${["A","B","C"].map(c=>`<option ${c===m.crit?"selected":""}>${c}</option>`).join("")}</select></div></div>
+        <div style="flex:2;min-width:220px">${f("doc","Documento del plan interno","F1/P-07 Rev. 04")}</div>
+      </div>
+      ${RO()?"":`<div style="display:flex;gap:10px"><button class="btn ghost" data-delmach>Eliminar máquina</button><div style="flex:1"></div><button class="btn primary" data-savemach>Guardar ficha</button></div>`}
+    </div></div>`;
+}
+
+function tabReglas(m){
+  const r = m.reglas || (m.reglas = {loto:true, vb:true, epi:"", avisos:[]});
+  return `<div class="card"><div class="bd">
+      <label class="checkbig ${r.loto?"on":""}" style="margin-bottom:10px"><input type="checkbox" data-r="loto" ${r.loto?"checked":""} ${RO()?"disabled":""}>
+        <span class="txt"><b>Exige consignación eléctrica antes de intervenir.</b><br><span style="color:var(--ink-2)">El parte no se abre hasta que el mecánico lo confirma.</span></span></label>
+      <label class="checkbig ${r.vb?"on":""}" style="margin-bottom:16px"><input type="checkbox" data-r="vb" ${r.vb?"checked":""} ${RO()?"disabled":""}>
+        <span class="txt"><b>Exige visto bueno antes de volver a producción.</b><br><span style="color:var(--ink-2)">El parte queda pendiente hasta que lo firma el responsable.</span></span></label>
+      <div class="field"><label for="r_epi">EPI obligatorio</label><input type="text" id="r_epi" data-r="epi" value="${esc(r.epi||"")}" ${RO()?"disabled":""}></div>
+      <div class="field"><label>Avisos que verá el mecánico al abrir cualquier parte</label>
+        <div class="linelist" id="avisos">${(r.avisos||[]).map((a,i)=>`
+          <div class="lineitem"><span class="n">${i+1}</span>
+            <input type="text" data-aviso="${i}" value="${esc(a)}" style="flex:1" ${RO()?"disabled":""}>
+            ${RO()?"":`<button class="btn ghost" data-delaviso="${i}" style="padding:2px 8px">✕</button>`}</div>`).join("")}</div>
+        ${RO()?"":`<button class="btn ghost" data-addaviso style="margin-top:9px;padding:5px 10px">${ICON.plus} Añadir aviso</button>`}
+        <div class="help" style="margin-top:8px">Salen en rojo, antes de tocar nada. Es donde va lo que no se puede olvidar nunca.</div></div>
+      ${RO()?"":`<div style="display:flex"><div style="flex:1"></div><button class="btn primary" data-savereglas>Guardar reglas</button></div>`}
+    </div></div>`;
+}
+
+function tabHoras(m){
+  const h = m.horas || (m.horas = {tiene:false, acum:0, semana:0, act:toISO(today()), gobierno:"Ambos — lo que ocurra antes"});
+  const proy = horasAcum(m);
+  return `
+    <div class="note" style="margin-bottom:14px">${ICON.info}<div>Sin horómetro no hace falta renunciar al plan por horas: se registran las horas trabajadas cuando se sabe, y entre registro y registro el portal proyecta con la media semanal. <b>Cada vez que actualices el contador, la proyección se corrige sola.</b></div></div>
+    <div class="card"><div class="bd">
+      <label class="checkbig ${h.tiene?"on":""}" style="margin-bottom:16px"><input type="checkbox" data-h="tiene" ${h.tiene?"checked":""} ${RO()?"disabled":""}>
+        <span class="txt"><b>La máquina tiene horómetro o contador de horas.</b><br><span style="color:var(--ink-2)">Si no lo tiene, se estiman a partir de las horas de producción.</span></span></label>
+      <div class="rowsplit">
+        <div style="flex:1;min-width:170px"><div class="field"><label for="h_acum">Horas acumuladas en el último registro</label>
+          <input type="number" id="h_acum" data-h="acum" value="${+h.acum||0}" ${RO()?"disabled":""}></div></div>
+        <div style="flex:1;min-width:170px"><div class="field"><label for="h_act">Fecha de ese registro</label>
+          <input type="date" id="h_act" data-h="act" value="${esc(h.act||"")}" ${RO()?"disabled":""}></div></div>
+        <div style="flex:1;min-width:170px"><div class="field"><label for="h_semana">Horas de trabajo por semana</label>
+          <input type="number" id="h_semana" data-h="semana" value="${+h.semana||0}" ${RO()?"disabled":""}></div></div>
+      </div>
+      <div class="field"><label for="h_gob">Gobierno del plan</label>
+        <select id="h_gob" data-h="gobierno" ${RO()?"disabled":""}>${["Ambos — lo que ocurra antes","Solo calendario","Solo horas de trabajo"].map(o=>`<option ${o===h.gobierno?"selected":""}>${esc(o)}</option>`).join("")}</select></div>
+      <div class="summary" style="margin-bottom:16px">
+        <div><span>Horas proyectadas a día de hoy</span><span class="mono">${nfmt(proy)} h</span></div>
+        <div><span>Proyección desde el último registro</span><span class="mono">+${nfmt(proy - (+h.acum||0))} h</span></div>
+      </div>
+      ${RO()?"":`<div style="display:flex;gap:10px"><button class="btn" data-hoy-horas>Poner el contador a día de hoy</button><div style="flex:1"></div><button class="btn primary" data-savehoras>Guardar</button></div>`}
+    </div></div>`;
+}
+
+function tabRepuestos(m){
+  const ps = m.repuestos || [];
+  return `
+    <div class="card">
+      <div class="hd"><h2>Repuestos y consumibles</h2><span class="sub">${ps.length}</span><div style="flex:1"></div>
+        ${RO()?"":`<button class="btn" data-addpart>${ICON.plus} Añadir</button>`}</div>
+      ${ps.length?`<div class="tablewrap"><table>
+        <thead><tr><th style="width:60px">Nivel</th><th>Descripción</th><th class="num">Stock</th><th class="num">Mínimo</th><th>Proveedor</th><th class="num">Plazo</th><th>Estado</th><th style="width:40px"></th></tr></thead>
+        <tbody>${ps.map((p,i)=>`<tr>
+          <td><span class="pill ${p.ref==="P0"?"crit":p.ref==="P1"?"warn":"neut"}"><i></i>${esc(p.ref)}</span></td>
+          <td><b>${esc(p.name)}</b>${p.nota?`<div class="sub" style="font-size:12.5px">${esc(p.nota)}</div>`:""}</td>
+          <td class="num">${p.stock}</td><td class="num">${p.min}</td>
+          <td class="sub">${esc(p.prov||"—")}</td><td class="num">${p.plazo||0} d</td>
+          <td>${p.stock===0?'<span class="pill crit"><i></i>Sin stock</span>':p.stock<p.min?'<span class="pill warn"><i></i>Bajo mínimo</span>':'<span class="pill ok"><i></i>Correcto</span>'}</td>
+          <td>${RO()?"":`<button class="btn ghost" data-delpart="${i}" style="padding:2px 7px">✕</button>`}</td>
+        </tr>`).join("")}</tbody></table></div>`
+      :`<div class="emptystate"><h3>Sin repuestos asociados</h3><p>El plazo de entrega pesa tanto como el stock: una pieza crítica con seis semanas de plazo hay que tenerla en la estantería aunque se use una vez al año.</p></div>`}
+    </div>`;
+}
+
+function tabHist(m){
+  const hs = DB.historial.filter(h=>h.mid===m.id).slice().reverse();
+  return `<div class="card">
+    <div class="hd"><h2>Histórico de intervenciones</h2><span class="sub">${hs.length}</span></div>
+    ${hs.length?`<div class="tablewrap"><table>
+      <thead><tr><th>Fecha</th><th>Intervención</th><th>Realizado por</th><th>Visto bueno</th><th class="num">Tiempo</th><th>Incidencias</th><th>Evidencias</th></tr></thead>
+      <tbody>${hs.map(h=>`<tr>
+        <td class="mono">${esc(fmtFull(parseISO(h.fecha)))}</td>
+        <td>${esc(h.tarea)}${h.obs?`<div class="sub" style="font-size:12.5px">${esc(h.obs)}</div>`:""}</td>
+        <td>${esc(h.por)}</td>
+        <td>${h.vb?esc(h.vbPor||"Sí"):'<span class="pill warn"><i></i>Pendiente</span>'}</td>
+        <td class="num">${h.min} min</td>
+        <td>${h.noConf?`<span class="pill crit"><i></i>${h.noConf} no conformes</span>`:""}${h.prov?'<span class="pill warn" style="margin-left:5px"><i></i>Provisional</span>':""}</td>
+        <td>${(h.fotos&&(h.fotos.antes||h.fotos.despues))?`<button class="btn ghost" data-fotos="${esc(h.id)}" style="padding:3px 8px">Ver fotos</button>`:'<span class="sub" style="font-size:12px">—</span>'}</td>
+      </tr>`).join("")}</tbody></table></div>`
+    :`<div class="emptystate"><h3>Todavía no hay partes cerrados</h3><p>Cada parte que cierre el mecánico queda aquí con su fecha, su firma, el tiempo del cronómetro y las respuestas de la lista de comprobación. Es lo que se enseña en una auditoría.</p></div>`}
+  </div>`;
+}
+
+function tabLubri(m){
+  return `<div class="note warn" style="margin-bottom:14px">${ICON.warn}<div><b>Limpiar antes de lubricar.</b> Grasa sobre polvo abrasivo forma una pasta que raya guías y destroza retenes.</div></div>
+  <div class="card"><div class="tablewrap"><table>
+    <thead><tr><th>Punto</th><th>Componente</th><th>Producto</th><th>Frecuencia</th><th>Precaución</th></tr></thead>
+    <tbody>${(m.lubri||[]).map(l=>`<tr><td><b>${esc(l.p)}</b></td><td class="sub">${esc(l.c)}</td>
+      <td class="mono" style="font-size:12.5px">${esc(l.pr)}</td><td>${freqPill(l.f)}</td><td class="sub">${esc(l.w)}</td></tr>`).join("")}</tbody>
+  </table></div></div>`;
+}
+
+function accEstado(e){
+  return e==="hecha" ? '<span class="pill ok"><i></i>Hecha</span>'
+       : e==="curso" ? '<span class="pill warn"><i></i>En curso</span>'
+       : '<span class="pill crit"><i></i>Pendiente</span>';
+}
+function tabAcc(m){
+  const bl = (l,tit,pl) => {
+    const rows = (m.acciones||[]).filter(a=>a.lvl===l);
+    if(!rows.length) return "";
+    return `<div class="card" style="margin-bottom:14px">
+      <div class="hd"><span class="pill ${l==="P0"?"crit":l==="P1"?"warn":"neut"}"><i></i>${l}</span><h2>${tit}</h2><div style="flex:1"></div><span class="sub">${pl}</span></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th style="width:40px">Nº</th><th>Acción</th><th style="width:150px">Responsable</th><th style="width:160px">Estado</th></tr></thead>
+        <tbody>${rows.map(a=>`<tr>
+          <td class="mono">${a.n}</td>
+          <td><b>${esc(a.t)}</b><div class="sub" style="font-size:12.5px">${esc(a.note||"")}</div></td>
+          <td class="sub">${esc(a.own)}</td>
+          <td>${RO()?accEstado(a.est):`<select data-acc="${a.n}">${["pendiente","curso","hecha"].map(o=>`<option value="${o}" ${o===a.est?"selected":""}>${o==="pendiente"?"Pendiente":o==="curso"?"En curso":"Hecha"}</option>`).join("")}</select>`}</td>
+        </tr>`).join("")}</tbody></table></div></div>`;
+  };
+  return `<div class="note" style="margin-bottom:14px">${ICON.info}<div>Acciones de recuperación con propietario y estado. Es lo que separa un informe guardado en una carpeta de un plan que se ejecuta.</div></div>
+    ${bl("P0","Bloquean la liberación","0 – 72 h")}${bl("P1","Estabilización","14 – 45 días")}${bl("P2","Robustez","60 – 90 días")}`;
+}
+function tabLib(m){
+  const ab = (m.liberacion||[]).filter(l=>!l.ok).length;
+  return `<div class="note ${ab?"warn":""}" style="margin-bottom:14px">${ab?ICON.warn:ICON.info}<div>${ab
+      ? `<b>La máquina no vuelve a producción normal hasta cerrar los ${ab} bloques abiertos.</b>`
+      : `<b>Todos los bloques cerrados.</b> La máquina está liberada.`}</div></div>
+    <div class="card"><div class="tablewrap"><table>
+      <thead><tr><th style="width:120px">Bloque</th><th>Criterio mínimo</th><th>Evidencia</th><th style="width:130px">Estado</th></tr></thead>
+      <tbody>${(m.liberacion||[]).map((l,i)=>`<tr>
+        <td><b>${esc(l.b)}</b></td><td>${esc(l.c)}</td><td class="sub">${esc(l.e)}</td>
+        <td>${RO()?(l.ok?'<span class="pill ok"><i></i>Cerrado</span>':'<span class="pill crit"><i></i>Abierto</span>')
+          :`<select data-lib="${i}"><option value="0" ${!l.ok?"selected":""}>Abierto</option><option value="1" ${l.ok?"selected":""}>Cerrado</option></select>`}</td>
+      </tr>`).join("")}</tbody></table></div></div>`;
+}
+
+/* ══════════════ VISTA · REPUESTOS GLOBAL ══════════════ */
+function viewRepuestos(){
+  const all = [];
+  DB.maquinas.forEach(m => (m.repuestos||[]).forEach(p => all.push({m,p})));
+  const bajo = all.filter(x => x.p.stock < x.p.min);
+  return `<div class="wrap">
+    <div class="pagehead"><div><p class="eyebrow">Almacén</p><h1>Repuestos</h1>
+      <p class="sub">${all.length} referencias en ${DB.maquinas.length} máquinas</p></div></div>
+    ${bajo.length?`<div class="note warn" style="margin-bottom:16px">${ICON.warn}<div><b>${bajo.length} referencias por debajo del mínimo.</b> Sin repuesto, las piezas sacrificiales se usan más allá de su límite hasta transmitir el desgaste a componentes caros.</div></div>`:""}
+    ${all.length?`<div class="card"><div class="tablewrap"><table>
+      <thead><tr><th style="width:60px">Nivel</th><th>Máquina</th><th>Descripción</th><th class="num">Stock</th><th class="num">Mín.</th><th>Proveedor</th><th class="num">Plazo</th><th>Estado</th></tr></thead>
+      <tbody>${all.map(({m,p})=>`<tr>
+        <td><span class="pill ${p.ref==="P0"?"crit":p.ref==="P1"?"warn":"neut"}"><i></i>${esc(p.ref)}</span></td>
+        <td><span class="code">${esc(m.id)}</span></td>
+        <td><b>${esc(p.name)}</b>${p.nota?`<div class="sub" style="font-size:12.5px">${esc(p.nota)}</div>`:""}</td>
+        <td class="num">${p.stock}</td><td class="num">${p.min}</td><td class="sub">${esc(p.prov||"—")}</td><td class="num">${p.plazo||0} d</td>
+        <td>${p.stock===0?'<span class="pill crit"><i></i>Sin stock</span>':p.stock<p.min?'<span class="pill warn"><i></i>Bajo mínimo</span>':'<span class="pill ok"><i></i>Correcto</span>'}</td>
+      </tr>`).join("")}</tbody></table></div></div>`
+    :`<div class="card"><div class="emptystate"><h3>Sin repuestos registrados</h3><p>Los repuestos se añaden desde la ficha de cada máquina, en la pestaña Repuestos.</p></div></div>`}
+  </div>`;
+}
+
+/* ══════════════ VISTA · AVERÍAS ══════════════ */
+function viewAverias(){
+  const av = DB.averias.slice().reverse();
+  const abiertas = av.filter(a=>a.abierta);
+  const paro = av.reduce((s,a)=>s+(+a.paro||0),0), rep = av.reduce((s,a)=>s+(+a.rep||0),0);
+  return `<div class="wrap">
+    <div class="pagehead">
+      <div><p class="eyebrow">Correctivo</p><h1>Solicitudes de reparación</h1>
+      <p class="sub">Mismos campos que el impreso en papel. La diferencia: las horas se acumulan solas por máquina.</p></div>
+      <div class="spacer"></div>
+      ${RO()?"":`<button class="btn primary" data-act="averia">Registrar solicitud</button>`}
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">Partes abiertos</div><div class="v">${abiertas.length}</div><div class="d">${esc(abiertas.map(a=>a.mid).join(", ")||"—")}</div></div>
+      <div class="kpi"><div class="k">Horas de paro acumuladas</div><div class="v">${nfmt(paro,1)}<small> h</small></div><div class="d">Todas las máquinas</div></div>
+      <div class="kpi"><div class="k">Horas de reparación</div><div class="v">${nfmt(rep,1)}<small> h</small></div><div class="d">${rep>0?`Ratio paro/reparación ${nfmt(paro/rep,1)}`:"Sin datos todavía"}</div></div>
+      <div class="kpi"><div class="k">Total de partes</div><div class="v">${av.length}</div><div class="d">Desde el arranque</div></div>
+    </div>
+    ${av.length?`<div class="card"><div class="tablewrap"><table>
+      <thead><tr><th>Nº parte</th><th>Máquina</th><th>Descripción y consecuencia</th><th>Solicitante</th><th class="num">Paro</th><th class="num">Rep.</th><th>Estado</th><th style="width:110px"></th></tr></thead>
+      <tbody>${av.map(a=>`<tr>
+        <td class="mono">${esc(a.id)}</td><td><span class="code">${esc(a.mid)}</span></td>
+        <td>${esc(a.desc)}${a.cons?`<div class="sub" style="font-size:12.5px">${esc(a.cons)}</div>`:""}
+            <div class="sub" style="font-size:12px">${esc(fmtFull(parseISO(a.fecha)))}</div></td>
+        <td class="sub">${esc(a.sol)}</td>
+        <td class="num">${nfmt(a.paro,2)}</td><td class="num">${nfmt(a.rep,2)}</td>
+        <td>${a.abierta?'<span class="pill crit"><i></i>Abierta</span>':'<span class="pill ok"><i></i>Cerrada</span>'}</td>
+        <td>${(RO()||!a.abierta)?"":`<button class="btn ghost" data-closeav="${esc(a.id)}" style="padding:3px 8px">Cerrar</button>`}</td>
+      </tr>`).join("")}</tbody></table></div></div>`
+    :`<div class="card"><div class="emptystate"><h3>Ninguna solicitud registrada</h3><p>Registrar las averías es lo que después dice qué máquina hay que reforzar en el preventivo.</p></div></div>`}
+  </div>`;
+}
+
+/* ══════════════ AGREGADOS PARA EL CUADRO DE MANDO ══════════════ */
+function ajustes(){ DB.ajustes = DB.ajustes || {tarifaHora:0, costeParoHora:0}; return DB.ajustes; }
+function ultimosMeses(n){
+  const out = [], d = today();
+  for(let i=n-1; i>=0; i--){ const x = new Date(d.getFullYear(), d.getMonth()-i, 1); out.push({y:x.getFullYear(), m:x.getMonth(), l:MES[x.getMonth()]}); }
+  return out;
+}
+const enMes = (iso,mm) => { const p = parseISO(iso); return p && p.getFullYear()===mm.y && p.getMonth()===mm.m; };
+function serieCumplimiento(ms){
+  return ms.map(mm => {
+    const hs = DB.historial.filter(h => enMes(h.fecha, mm));
+    return hs.length ? Math.round(hs.filter(h=>!h.tarde).length / hs.length * 100) : null;
+  });
+}
+function serieParo(ms){
+  return ms.map(mm => DB.averias.filter(a => enMes(a.fecha, mm)).reduce((s,a)=>s+(+a.paro||0), 0));
+}
+function costePorMaquina(){
+  const a = ajustes(), th = +a.tarifaHora||0, cp = +a.costeParoHora||0;
+  return DB.maquinas.map(m => {
+    const prev = DB.historial.filter(h=>h.mid===m.id).reduce((s,h)=>s+(+h.min||0),0)/60*th;
+    const av   = DB.averias.filter(x=>x.mid===m.id);
+    const corr = av.reduce((s,x)=>s+((+x.rep||0)*th + (+x.paro||0)*cp), 0);
+    return {m, prev, corr, tot:prev+corr, nAv:av.length};
+  }).filter(x=>x.tot>0).sort((x,y)=>y.tot-x.tot);
+}
+
+/* ── Gráficos ── */
+function barras({labels, values, suffix="", alto=190}){
+  const W=560, pad={l:38,r:14,t:16,b:26}, iw=W-pad.l-pad.r, ih=alto-pad.t-pad.b;
+  const reales = values.filter(v=>v!=null);
+  const max = Math.max(20, Math.ceil((Math.max.apply(null, reales.concat([0]))||100)/20)*20);
+  const bw = iw/labels.length, bar = Math.min(30, bw*0.55);
+  const last = values.reduce((k,v,i)=> v!=null ? i : k, -1);
+  return `<svg class="chart" viewBox="0 0 ${W} ${alto}" role="img" aria-label="Cumplimiento del plan por mes">
+    ${[0,max/2,max].map(t=>{const y=pad.t+ih-(t/max)*ih;
+      return `<line class="gl" x1="${pad.l}" x2="${W-pad.r}" y1="${y}" y2="${y}"/><text x="${pad.l-8}" y="${y+3.5}" text-anchor="end" class="val">${t}${suffix}</text>`;}).join("")}
+    ${values.map((v,i)=>{
+      const x = pad.l+i*bw+(bw-bar)/2;
+      if(v==null) return `<rect x="${x}" y="${pad.t+ih-3}" width="${bar}" height="3" rx="1.5" fill="var(--grid)"><title>${labels[i]}: sin partes</title></rect>`;
+      const h=(v/max)*ih, y=pad.t+ih-h, es=i===last;
+      return `<g><rect x="${x}" y="${y}" width="${bar}" height="${Math.max(h,2)}" rx="4" fill="${es?"var(--brand)":"var(--s1)"}"><title>${labels[i]}: ${v}${suffix}</title></rect>
+        ${es?`<text x="${x+bar/2}" y="${y-6}" text-anchor="middle" class="val" style="fill:var(--ink);font-weight:600">${v}${suffix}</text>`:""}</g>`;
+    }).join("")}
+    <line class="ax" x1="${pad.l}" x2="${W-pad.r}" y1="${pad.t+ih}" y2="${pad.t+ih}"/>
+    ${labels.map((l,i)=>`<text x="${pad.l+i*bw+bw/2}" y="${alto-8}" text-anchor="middle">${l}</text>`).join("")}
+  </svg>`;
+}
+function area({labels, values, suffix="", alto=190}){
+  const W=560, pad={l:40,r:16,t:16,b:26}, iw=W-pad.l-pad.r, ih=alto-pad.t-pad.b;
+  const max = Math.max(4, Math.ceil((Math.max.apply(null, values.concat([0]))||10)/4)*4);
+  const X = i => pad.l+(i/Math.max(1,values.length-1))*iw, Y = v => pad.t+ih-(v/max)*ih;
+  const linea = values.map((v,i)=>`${i?"L":"M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const relleno = `${linea} L${X(values.length-1).toFixed(1)},${pad.t+ih} L${X(0)},${pad.t+ih} Z`;
+  const ult = values[values.length-1];
+  return `<svg class="chart" viewBox="0 0 ${W} ${alto}" role="img" aria-label="Horas de paro no programado por mes">
+    ${[0,max/2,max].map(t=>{const y=Y(t);
+      return `<line class="gl" x1="${pad.l}" x2="${W-pad.r}" y1="${y}" y2="${y}"/><text x="${pad.l-8}" y="${y+3.5}" text-anchor="end" class="val">${nfmt(t)}</text>`;}).join("")}
+    <path d="${relleno}" fill="var(--s2)" opacity=".14"/>
+    <path d="${linea}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${values.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="${i===values.length-1?5:3.4}" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>${labels[i]}: ${nfmt(v,1)} ${suffix}</title></circle>`).join("")}
+    ${ult>0?`<text x="${X(values.length-1)}" y="${Y(ult)-13}" text-anchor="end" class="val" style="fill:var(--ink);font-weight:600">${nfmt(ult,1)} ${suffix}</text>`:""}
+    <line class="ax" x1="${pad.l}" x2="${W-pad.r}" y1="${pad.t+ih}" y2="${pad.t+ih}"/>
+    ${labels.map((l,i)=>`<text x="${X(i)}" y="${alto-8}" text-anchor="middle">${l}</text>`).join("")}
+  </svg>`;
+}
+function panelVacio(titulo, texto){
+  return `<div class="emptystate" style="padding:34px 22px"><h3>${titulo}</h3><p>${texto}</p></div>`;
+}
+
+/* ══════════════ VISTA · CUADRO DE MANDO ══════════════ */
+function viewCuadro(){
+  const ms = ultimosMeses(8), labels = ms.map(x=>x.l[0].toUpperCase()+x.l.slice(1));
+  const cum = serieCumplimiento(ms), paro = serieParo(ms), costes = costePorMaquina();
+  const a = ajustes();
+
+  const ag = agenda(), venc = ag.filter(x=>x.st==="vencida");
+  const hist = DB.historial, enPlazo = hist.filter(h=>!h.tarde).length;
+  const cumpl = hist.length ? Math.round(enPlazo/hist.length*100) : null;
+  const paroTot = DB.averias.reduce((s,x)=>s+(+x.paro||0),0);
+  const repTot  = DB.averias.reduce((s,x)=>s+(+x.rep||0),0);
+  const mttr = DB.averias.length ? repTot/DB.averias.length : null;
+  const costeTot = costes.reduce((s,x)=>s+x.tot,0);
+  const pctCorr = costeTot ? Math.round(costes.reduce((s,x)=>s+x.corr,0)/costeTot*100) : null;
+  const carga = DB.maquinas.reduce((s,m)=>s+cargaSemanal(m),0);
+  const sinPlan = DB.maquinas.filter(m=>!(m.tareas||[]).length);
+  const noLib = DB.maquinas.filter(m=>(m.liberacion||[]).some(l=>!l.ok));
+  const bajo = DB.maquinas.reduce((s,m)=>s+(m.repuestos||[]).filter(p=>p.stock<p.min).length,0);
+  const provAbiertos = hist.filter(h=>h.prov).length;
+
+  const kpi = (k,v,u,d,cls="") => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}${u?`<small> ${u}</small>`:""}</div>${d?`<div class="d ${cls}">${d}</div>`:""}</div>`;
+
+  return `<div class="wrap">
+    <div class="pagehead">
+      <div><p class="eyebrow">${state.role==="direccion"?"Dirección · solo consulta":"Encargado de planta"}</p><h1>Cuadro de mando</h1>
+      <p class="sub">${fmtFull(today())}</p></div>
+    </div>
+
+    ${noLib.length?`<div class="note warn" style="margin-bottom:14px">${ICON.warn}<div><b>${noLib.length===1?"Una máquina sigue sin liberar":`${noLib.length} máquinas siguen sin liberar`} para producción normal:</b> ${esc(noLib.map(m=>m.id).join(", "))}.</div></div>`:""}
+    ${provAbiertos?`<div class="note warn" style="margin-bottom:14px">${ICON.warn}<div><b>${provAbiertos} ${provAbiertos===1?"arreglo provisional":"arreglos provisionales"} sin convertir en reparación definitiva.</b> Es la deuda que un día se cobra sola.</div></div>`:""}
+
+    <div class="kpis">
+      ${kpi("Cumplimiento del plan", cumpl===null?"—":cumpl, cumpl===null?"":"%",
+            cumpl===null?"Sin partes cerrados todavía":`${enPlazo} de ${hist.length} en plazo`, cumpl!==null&&cumpl<80?"down":"up")}
+      ${kpi("Paro no programado", nfmt(paroTot,1), "h",
+            DB.averias.length?`${DB.averias.length} ${DB.averias.length===1?"avería":"averías"} registradas`:"Sin averías registradas", paroTot?"down":"")}
+      ${kpi("Coste de mantenimiento", costeTot?nfmt(costeTot):"—", costeTot?"€":"",
+            costeTot?`${pctCorr} % correctivo`:"Falta la tarifa por hora", costeTot&&pctCorr>50?"down":"")}
+      ${kpi("Tareas vencidas ahora", venc.length, "",
+            venc.length?"Primeras en la pantalla del mecánico":"Todo al día", venc.length?"down":"up")}
+    </div>
+
+    <div class="grid2">
+      <div class="card chartcard">
+        <div class="hd"><h2>Cumplimiento del plan</h2><div style="flex:1"></div><span class="sub">% en plazo, por mes</span></div>
+        ${cum.some(v=>v!=null) ? `<div class="bd">${barras({labels, values:cum, suffix:"%"})}</div>`
+          : panelVacio("Aún sin partes cerrados", "Este es el indicador que enseña si el preventivo se cumple de verdad. Se dibuja solo desde el primer parte que firme el mecánico.")}
+      </div>
+      <div class="card chartcard">
+        <div class="hd"><h2>Paro no programado</h2><div style="flex:1"></div><span class="sub">horas al mes</span></div>
+        ${paro.some(v=>v>0) ? `<div class="bd">${area({labels, values:paro, suffix:"h"})}</div>`
+          : panelVacio("Aún sin averías registradas", "Cada solicitud de reparación suma aquí sus horas de paro. Es la curva que debería bajar conforme el preventivo funcione.")}
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="hd"><h2>Coste de mantenimiento por máquina</h2><div style="flex:1"></div><span class="sub">acumulado</span></div>
+      ${costes.length ? `<div class="bd">
+        <div class="legend"><span><i style="background:var(--s1)"></i>Preventivo</span><span><i style="background:var(--s2)"></i>Correctivo, incluido el coste del paro</span></div>
+        ${costes.map(c=>{
+          const max = costes[0].tot || 1;
+          return `<div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px">
+              <span><span class="code">${esc(c.m.id)}</span> <span style="color:var(--ink-2)">${esc(c.m.nombre)}</span>${c.nAv?` <span class="sub">· ${c.nAv} ${c.nAv===1?"avería":"averías"}</span>`:""}</span>
+              <span class="mono" style="font-weight:600">${nfmt(c.tot)} €</span></div>
+            <div style="display:flex;height:15px;border-radius:4px;overflow:hidden;background:var(--surface-2)">
+              <div style="width:${(c.prev/max*100).toFixed(1)}%;background:var(--s1)" title="Preventivo ${nfmt(c.prev)} €"></div>
+              <div style="width:2px;background:var(--surface)"></div>
+              <div style="width:${(c.corr/max*100).toFixed(1)}%;background:var(--s2)" title="Correctivo ${nfmt(c.corr)} €"></div>
+            </div></div>`;}).join("")}
+        ${costes.length&&pctCorr>50?`<div class="note" style="margin-top:14px">${ICON.info}<div>El <b>${pctCorr} %</b> del gasto se va en correctivo. Esta es la pantalla que convierte el mantenimiento en una decisión de inversión: cuando una máquina se lleva más en averías que en prevención, o se refuerza su plan o se plantea sustituirla.</div></div>`:""}
+      </div>`
+      : panelVacio("Falta decir cuánto cuesta una hora",
+          "Sin la tarifa de mano de obra y el coste de una hora de máquina parada no se puede poner precio a nada. Están justo abajo y se rellenan una sola vez.")}
+    </div>
+
+    <div class="grid2" style="margin-top:14px">
+      <div class="card">
+        <div class="hd"><h2>Qué está vencido ahora</h2><div style="flex:1"></div><span class="sub">${venc.length}</span></div>
+        ${venc.length?`<div class="tablewrap"><table style="min-width:0">
+          <thead><tr><th style="width:78px">Máquina</th><th>Tarea</th><th class="num">Retraso</th></tr></thead>
+          <tbody>${venc.map(x=>`<tr>
+            <td><span class="code">${esc(x.m.id)}</span> ${critPill(x.m.crit)}</td>
+            <td>${esc(x.t.nombre)}<div class="sub" style="font-size:12px">${esc(x.t.perfil||"")}</div></td>
+            <td class="num" style="color:var(--crit-ink);font-weight:600">${-x.d} d</td></tr>`).join("")}</tbody>
+        </table></div>`: panelVacio("Nada vencido", "Todas las tareas programadas están dentro de plazo.")}
+      </div>
+      <div class="card">
+        <div class="hd"><h2>Estado de la instalación</h2></div>
+        <div class="bd">
+          <div class="summary">
+            <div><span>Máquinas con plan cargado</span><span>${DB.maquinas.length-sinPlan.length} de ${DB.maquinas.length}${sinPlan.length?` · faltan ${esc(sinPlan.map(m=>m.id).join(", "))}`:""}</span></div>
+            <div><span>Tareas definidas</span><span>${DB.maquinas.reduce((s,m)=>s+(m.tareas||[]).length,0)}</span></div>
+            <div><span>Carga preventiva semanal</span><span class="mono">${hm(carga)}</span></div>
+            <div><span>MTTR</span><span class="mono">${mttr===null?"—":nfmt(mttr,1)+" h"}</span></div>
+            <div><span>Repuestos bajo mínimo</span><span style="${bajo?"color:var(--crit-ink);font-weight:600":""}">${bajo}</span></div>
+            <div><span>Partes archivados</span><span>${hist.length}</span></div>
+          </div>
+          ${carga>0?`<div class="note" style="margin-top:14px">${ICON.info}<div>Con dos personas en el departamento, ${hm(carga)} de preventivo a la semana ${carga>600?"<b>ya aprieta</b>":"es asumible"}. Vigila este número al cargar máquinas nuevas.</div></div>`:""}
+        </div>
+      </div>
+    </div>
+
+    ${RO()?"":`
+    <div class="card" style="margin-top:14px">
+      <div class="hd"><h2>Cuánto cuesta una hora</h2><div style="flex:1"></div><span class="sub">se rellena una vez</span></div>
+      <div class="bd">
+        <div class="rowsplit">
+          <div style="flex:1;min-width:210px"><div class="field"><label for="aj_tarifa">Mano de obra interna (€ por hora)</label>
+            <input type="number" id="aj_tarifa" data-aj="tarifaHora" value="${+a.tarifaHora||0}" min="0" step="0.5"></div></div>
+          <div style="flex:1;min-width:210px"><div class="field"><label for="aj_paro">Coste de una hora de máquina parada (€)</label>
+            <input type="number" id="aj_paro" data-aj="costeParoHora" value="${+a.costeParoHora||0}" min="0" step="1"></div></div>
+        </div>
+        <div class="note" style="margin-bottom:14px">${ICON.info}<div>El segundo es el que de verdad mueve a gerencia. No es el sueldo de nadie: es lo que deja de facturarse mientras la línea está parada. Aunque sea una estimación aproximada, ponla — sin ella, una avería de seis horas parece costar cuarenta euros.</div></div>
+        <div style="display:flex"><div style="flex:1"></div><button class="btn primary" data-saveaj>Guardar</button></div>
+      </div>
+    </div>`}
+  </div>`;
+}
+
+/* ══════════════ ALTA DE MÁQUINA ══════════════ */
+const FASES = ["Identificación","Criticidad","Reglas del equipo","Horas de trabajo","Resumen"];
+function altaInit(){
+  state.alta = {step:0, d:{id:"", nombre:"", grupo:(DB.grupos||["Producción"])[0], ubic:"",
+    resp:((DB.personas||[])[0]||{}).n||"", fab:"", modelo:"", serie:"", anio:"", doc:"",
+    q1:null,q2:null,q3:null,q4:null,q5:null,
+    reglas:{loto:true, vb:true, epi:"Guantes anticorte, gafas y calzado de seguridad", avisos:[]},
+    horas:{tiene:false, acum:0, semana:40, act:toISO(today()), gobierno:"Ambos — lo que ocurra antes"}}};
+}
+function altaCrit(d){
+  let s=0;
+  if(d.q1===true) s+=2; if(d.q2===false) s+=2; if(d.q3===true) s+=3; if(d.q4===true) s+=2; if(d.q5===true) s+=1;
+  return s>=6?"A":s>=3?"B":"C";
+}
+const yesno = (path,q,val,hint="") => `
+  <div class="chkitem" style="margin-bottom:8px"><div class="top">
+    <span class="lbl">${q}${hint?`<div class="sub" style="font-size:12.5px">${hint}</div>`:""}</span>
+    <span class="seg">
+      <button data-yn="${path}" data-v="si" class="${val===true?"on-sel":""}">Sí</button>
+      <button data-yn="${path}" data-v="no" class="${val===false?"on-sel":""}">No</button>
+    </span></div></div>`;
+
+function viewAlta(){
+  const a = state.alta, d = a.d, st = a.step;
+  const A = (k,l,ph="",type="text") => `<div class="field"><label for="a_${k}">${l}</label><input type="${type}" id="a_${k}" data-a="${k}" value="${esc(d[k]||"")}" placeholder="${ph}"></div>`;
+  let body = "";
+
+  if(st===0) body = `<div class="card"><div class="bd">
+      <div class="rowsplit">
+        <div style="flex:1;min-width:150px">${A("id","Código de máquina","E23")}</div>
+        <div style="flex:2;min-width:230px">${A("nombre","Nombre","Enfajadora de la línea 3")}</div>
+      </div>
+      <div class="rowsplit">
+        <div style="flex:1;min-width:190px"><div class="field"><label for="a_grupo">Grupo</label>
+          <select id="a_grupo" data-a="grupo">${(DB.grupos||[]).map(g=>`<option ${g===d.grupo?"selected":""}>${esc(g)}</option>`).join("")}</select></div></div>
+        <div style="flex:1;min-width:190px">${A("ubic","Ubicación o línea")}</div>
+        <div style="flex:1;min-width:190px"><div class="field"><label for="a_resp">Responsable del grupo</label>
+          <select id="a_resp" data-a="resp">${(DB.personas||[]).map(p=>`<option ${p.n===d.resp?"selected":""}>${esc(p.n)}</option>`).join("")}</select></div></div>
+      </div>
+      <div class="rowsplit">
+        <div style="flex:1;min-width:150px">${A("fab","Fabricante")}</div>
+        <div style="flex:1;min-width:150px">${A("modelo","Modelo")}</div>
+        <div style="flex:1;min-width:130px">${A("serie","Nº de serie")}</div>
+        <div style="flex:1;min-width:110px">${A("anio","Año")}</div>
+      </div>
+      ${A("doc","Documento del plan interno","F1/P-07 Rev. 04")}
+    </div></div>
+    <div class="note" style="margin-top:14px">${ICON.info}<div>El código es el que irá impreso en el QR pegado en el cuadro de la máquina.</div></div>`;
+
+  if(st===1){
+    const c = altaCrit(d);
+    body = `<div class="note" style="margin-bottom:14px">${ICON.info}<div>No todas las máquinas merecen el mismo plan. Responde cinco preguntas y el sistema propone la criticidad.</div></div>
+    <div class="card"><div class="bd">
+      ${yesno("q1","Si esta máquina para, ¿para toda la línea?",d.q1)}
+      ${yesno("q2","¿Hay un equipo alternativo o forma de seguir produciendo?",d.q2)}
+      ${yesno("q3","¿Un fallo puede afectar a la seguridad de las personas?",d.q3)}
+      ${yesno("q4","¿Un fallo puede afectar al producto o a su calidad?",d.q4)}
+      ${yesno("q5","¿El repuesto principal tarda más de dos semanas en llegar?",d.q5)}
+    </div></div>
+    <div class="card" style="margin-top:14px"><div class="bd" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div><p class="eyebrow">Criticidad propuesta</p><div style="font-size:34px;font-weight:600;line-height:1">${c}</div></div>
+      <div style="flex:1;min-width:230px" class="sub">${
+        c==="A"?"Crítica. Plan completo, repuestos en stock y prioridad máxima ante un vencimiento."
+       :c==="B"?"Importante. Plan preventivo normal, repuestos por condición."
+       :"Secundaria. Inspección periódica ligera."}</div>
+    </div></div>`;
+  }
+
+  if(st===2){
+    const r = d.reglas;
+    body = `<div class="card"><div class="bd">
+      <label class="checkbig ${r.loto?"on":""}" style="margin-bottom:10px"><input type="checkbox" data-ar="loto" ${r.loto?"checked":""}>
+        <span class="txt"><b>Exige consignación eléctrica antes de intervenir.</b><br><span style="color:var(--ink-2)">El parte no se abre sin confirmarlo.</span></span></label>
+      <label class="checkbig ${r.vb?"on":""}" style="margin-bottom:16px"><input type="checkbox" data-ar="vb" ${r.vb?"checked":""}>
+        <span class="txt"><b>Exige visto bueno antes de volver a producción.</b><br><span style="color:var(--ink-2)">El parte queda pendiente hasta que lo firma el responsable.</span></span></label>
+      <div class="field"><label for="ar_epi">EPI obligatorio</label><input type="text" id="ar_epi" data-ar="epi" value="${esc(r.epi)}"></div>
+      <div class="field"><label for="ar_avisos">Advertencias específicas de esta máquina</label>
+        <textarea id="ar_avisos" data-aravisos placeholder="Una por línea.&#10;Nunca aire comprimido — solo aspiración industrial&#10;Limpiar antes de lubricar. Grasa aprobada: SKF LGWA 2" style="min-height:104px">${esc((r.avisos||[]).join("\n"))}</textarea>
+        <div class="help" style="margin-top:6px">Salen en rojo al abrir cualquier parte de esta máquina, antes de empezar.</div></div>
+    </div></div>`;
+  }
+
+  if(st===3){
+    const h = d.horas;
+    body = `<div class="note" style="margin-bottom:14px">${ICON.info}<div>Si no hay horómetro no pasa nada: se registran las horas trabajadas cuando se sepan y el portal proyecta con la media semanal entre registros.</div></div>
+    <div class="card"><div class="bd">
+      <label class="checkbig ${h.tiene?"on":""}" style="margin-bottom:16px"><input type="checkbox" data-ah="tiene" ${h.tiene?"checked":""}>
+        <span class="txt"><b>La máquina tiene horómetro o contador de horas.</b></span></label>
+      <div class="rowsplit">
+        <div style="flex:1;min-width:170px"><div class="field"><label for="ah_acum">Horas acumuladas hoy</label><input type="number" id="ah_acum" data-ah="acum" value="${+h.acum||0}"></div></div>
+        <div style="flex:1;min-width:170px"><div class="field"><label for="ah_semana">Horas de trabajo por semana</label><input type="number" id="ah_semana" data-ah="semana" value="${+h.semana||0}"></div></div>
+      </div>
+      <div class="field"><label for="ah_gob">Gobierno del plan</label>
+        <select id="ah_gob" data-ah="gobierno">${["Ambos — lo que ocurra antes","Solo calendario","Solo horas de trabajo"].map(o=>`<option ${o===h.gobierno?"selected":""}>${esc(o)}</option>`).join("")}</select>
+        <div class="help" style="margin-top:6px">«Lo que ocurra antes» evita que una máquina parada acumule óxido sin revisión y que una intensiva llegue tarde.</div></div>
+    </div></div>`;
+  }
+
+  if(st===4) body = `<div class="card"><div class="hd"><h2>Resumen</h2></div><div class="bd">
+      <div class="summary">
+        <div><span>Máquina</span><span>${esc(d.id||"—")} · ${esc(d.nombre||"sin nombre")}</span></div>
+        <div><span>Grupo y responsable</span><span>${esc(d.grupo)} · ${esc(d.resp)}</span></div>
+        <div><span>Criticidad</span><span>${altaCrit(d)}</span></div>
+        <div><span>Consignación / visto bueno</span><span>${d.reglas.loto?"Sí":"No"} / ${d.reglas.vb?"Sí":"No"}</span></div>
+        <div><span>Avisos definidos</span><span>${(d.reglas.avisos||[]).length}</span></div>
+        <div><span>Gobierno del plan</span><span>${esc(d.horas.gobierno)}</span></div>
+      </div>
+      <div class="note" style="margin-top:16px">${ICON.info}<div>Al crearla entrarás directamente a su plan para añadir las tareas. Sin tareas, la máquina no genera nada en la pantalla del mecánico.</div></div>
+    </div></div>`;
+
+  const ok = st!==0 || (d.id && d.nombre);
+  return `<div class="wrap">
+    <div class="pagehead"><div>
+      <button class="btn ghost" data-nav="maquinas" style="margin-bottom:8px;padding:4px 8px">← Máquinas</button>
+      <p class="eyebrow">Alta de máquina · fase ${st+1} de ${FASES.length}</p><h1>${FASES[st]}</h1>
+    </div></div>
+    <div class="tabs" role="tablist" style="margin-bottom:18px">${FASES.map((f,i)=>`<button role="tab" aria-selected="${i===st}" data-fase="${i}">${i+1}. ${f}</button>`).join("")}</div>
+    ${body}
+    <div style="display:flex;gap:10px;margin-top:20px;align-items:center">
+      ${st>0?`<button class="btn" data-fase="${st-1}">Atrás</button>`:""}
+      <div style="flex:1"></div>
+      ${st<FASES.length-1 ? `<button class="btn primary" data-fase="${st+1}" ${ok?"":"disabled"}>Continuar</button>`
+                          : `<button class="btn primary" data-altafin>Crear máquina</button>`}
+    </div>
+  </div>`;
+}
+
+/* ══════════════ MODALES ══════════════ */
+function sheetShell(title, sub, stepsHtml, content, footer, extra=""){
+  return `<div class="scrim" data-scrim>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <header>
+        <div style="min-width:0"><p class="eyebrow">${sub}</p><h2 style="font-size:17px">${esc(title)}</h2></div>
+        <div style="flex:1"></div>${extra}
+        <button class="x" data-close aria-label="Cerrar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></button>
+      </header>
+      ${stepsHtml}<div class="content">${content}</div><footer>${footer}</footer>
+    </div></div>`;
+}
+
+/* ── Editor de tarea ── */
+function sheetTarea(){
+  const t = state.td, nueva = !t._id;
+  const F = (k,l,ph="",type="text",st="") => `<div class="field"><label for="t_${k}">${l}</label><input type="${type}" id="t_${k}" data-t="${k}" value="${esc(t[k]==null?"":t[k])}" placeholder="${ph}" style="${st}"></div>`;
+  return sheetShell(nueva?"Nueva tarea":"Editar tarea", `${esc(state.mid)} · plan de mantenimiento`, "", `
+    ${F("nombre","Nombre de la tarea","Engrase de guía y patín")}
+    <div class="field"><label for="t_desc">Descripción para el mecánico</label>
+      <textarea id="t_desc" data-t="desc" placeholder="Cómo se hace, con qué y qué hay que vigilar" style="min-height:64px">${esc(t.desc||"")}</textarea></div>
+
+    <div class="field"><label>Puntos de comprobación</label>
+      <div class="linelist">${(t.checks||[]).map((c,i)=>`
+        <div class="lineitem"><span class="n">${i+1}</span>
+          <input type="text" data-chk="${i}" value="${esc(c)}" style="flex:1" placeholder="Punto a comprobar">
+          <button class="btn ghost" data-delchk="${i}" style="padding:2px 8px">✕</button></div>`).join("")}</div>
+      <button class="btn ghost" data-addchk style="margin-top:9px;padding:5px 10px">${ICON.plus} Añadir punto</button>
+      <div class="help" style="margin-top:7px">Es la lista que el mecánico marca como Conforme / No conforme / N/A.</div></div>
+
+    <div class="field"><label>Valores a registrar</label>
+      <div class="linelist">${(t.medidas||[]).map((md,i)=>`
+        <div class="lineitem" style="flex-wrap:wrap">
+          <input type="text" data-med="${i}|n" value="${esc(md.n)}" placeholder="Qué se mide" style="flex:3;min-width:150px">
+          <input type="text" data-med="${i}|u" value="${esc(md.u)}" placeholder="Unidad" style="flex:1;min-width:70px">
+          <input type="number" step="any" data-med="${i}|min" value="${md.min==null?"":md.min}" placeholder="mín." style="flex:1;min-width:70px">
+          <input type="number" step="any" data-med="${i}|max" value="${md.max==null?"":md.max}" placeholder="máx." style="flex:1;min-width:70px">
+          <button class="btn ghost" data-delmed="${i}" style="padding:2px 8px">✕</button></div>`).join("")}</div>
+      <button class="btn ghost" data-addmed style="margin-top:9px;padding:5px 10px">${ICON.plus} Añadir medición</button>
+      <div class="help" style="margin-top:7px">Un número guardado cada semana enseña la tendencia; un tic solo dice «hecho». Fuera de mín./máx. el parte marca no conforme.</div></div>
+
+    <div class="rowsplit">
+      <div style="flex:1;min-width:180px"><div class="field"><label for="t_unidad">Unidad de frecuencia</label>
+        <select id="t_unidad" data-t="unidad">${UNIDADES.map(u=>`<option ${u===t.unidad?"selected":""}>${u}</option>`).join("")}</select></div></div>
+      <div style="flex:1;min-width:110px">${F("cada","Cada","1","number")}</div>
+      <div style="flex:1;min-width:130px">${F("cadaH","…o cada (horas)","opcional","number")}</div>
+      <div style="flex:1;min-width:130px">${F("min","Duración (min)","20","number")}</div>
+    </div>
+    <div class="help" style="margin:-6px 0 16px">Si rellenas las dos, se ejecuta lo que ocurra antes. Así se define un «semanal o 40 h».</div>
+
+    <div class="rowsplit">
+      <div style="flex:1;min-width:200px"><div class="field"><label for="t_perfil">¿Quién la ejecuta?</label>
+        <select id="t_perfil" data-t="perfil">${PERFILES.map(p=>`<option ${p===t.perfil?"selected":""}>${p}</option>`).join("")}</select></div></div>
+      <div style="flex:1;min-width:200px"><div class="field"><label for="t_fotos">Fotografías obligatorias</label>
+        <select id="t_fotos" data-t="fotos">${FOTOS.map(p=>`<option ${p===t.fotos?"selected":""}>${p}</option>`).join("")}</select></div></div>
+    </div>
+    <label class="checkbig ${t.parada?"on":""}" style="margin-bottom:14px"><input type="checkbox" data-t="parada" ${t.parada?"checked":""}>
+      <span class="txt"><b>Requiere la máquina parada.</b><br><span style="color:var(--ink-2)">Se marca en la tarjeta del mecánico y avisa al encargado.</span></span></label>
+    ${F("rep","Repuestos o consumibles previstos","SKF LGWA 2 · 1 cartucho")}
+    <div class="rowsplit">
+      <div style="flex:1;min-width:200px"><div class="field"><label for="t_last">Última vez que se hizo</label>
+        <input type="date" id="t_last" data-t="last" value="${esc(t.last||"")}"></div>
+        <div class="help" style="margin:-10px 0 0">Desde aquí cuenta el próximo vencimiento.</div></div>
+    </div>
+  `, `${nueva?"":`<button class="btn ghost" data-deltask>Eliminar tarea</button>`}<div class="spacer"></div>
+     <button class="btn ghost" data-close>Cancelar</button>
+     <button class="btn primary" data-savetask>${nueva?"Añadir tarea":"Guardar cambios"}</button>`);
+}
+
+/* ── Repuesto ── */
+function sheetRepuesto(){
+  return sheetShell("Añadir repuesto", `${esc(state.mid)} · almacén`, "", `
+    <div class="rowsplit">
+      <div class="field" style="flex:1;min-width:130px"><label for="rref">Nivel</label>
+        <select id="rref"><option>P0</option><option>P1</option><option selected>C</option></select>
+        <div class="help" style="margin-top:6px">P0 bloquea, P1 estabiliza, C consumible.</div></div>
+      <div class="field" style="flex:2;min-width:220px"><label for="rname">Descripción</label><input type="text" id="rname" placeholder="Rodamiento 6204-2RS"></div>
+    </div>
+    <div class="rowsplit">
+      <div class="field" style="flex:1;min-width:110px"><label for="rstock">Stock</label><input type="number" id="rstock" value="0"></div>
+      <div class="field" style="flex:1;min-width:110px"><label for="rmin">Mínimo</label><input type="number" id="rmin" value="1"></div>
+      <div class="field" style="flex:1;min-width:140px"><label for="rplazo">Plazo (días)</label><input type="number" id="rplazo" value="7"></div>
+      <div class="field" style="flex:2;min-width:180px"><label for="rprov">Proveedor</label><input type="text" id="rprov"></div>
+    </div>
+    <div class="field"><label for="rnota">Criterio de compra</label><input type="text" id="rnota" placeholder="Qué hay que confirmar antes de pedirlo"></div>
+  `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-dorep>Añadir</button>`);
+}
+
+/* ── Solicitud de reparación ── */
+function sheetAveria(){
+  const d = today();
+  const n = String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+  const seq = String(DB.averias.filter(a=>String(a.id).startsWith(n)).length+1).padStart(2,"0");
+  return sheetShell("Solicitud de reparación", `Formato Ver. 1.0 · nº de parte ${n+seq}`, "", `
+    <div class="summary" style="margin-bottom:16px">
+      <div><span>Fecha</span><span class="mono">${esc(fmtFull(d))}</span></div>
+      <div><span>Nº de parte</span><span class="mono">${n+seq}</span></div>
+    </div>
+    <div class="rowsplit">
+      <div class="field" style="flex:2;min-width:200px"><label for="am">Máquina</label>
+        <select id="am">${DB.maquinas.map(m=>`<option value="${esc(m.id)}">${esc(m.id)} — ${esc(m.nombre)}</option>`).join("")}</select></div>
+      <div class="field" style="flex:1;min-width:180px"><label for="asol">Solicitante</label>
+        <select id="asol">${(DB.personas||[]).map(p=>`<option>${esc(p.n)}</option>`).join("")}</select></div>
+    </div>
+    <div class="field"><label for="ad">Descripción</label><textarea id="ad" placeholder="Qué ha pasado, con tus palabras"></textarea></div>
+    <div class="field"><label for="ac">Consecuencia</label><textarea id="ac" placeholder="¿La máquina está parada? ¿Desde cuándo? ¿Puede seguir funcionando y con qué riesgo?"></textarea>
+      <div class="help" style="margin-top:6px">Es el campo con más valor: distingue una máquina parada de una que aguanta bajo riesgo.</div></div>
+    <div class="rowsplit">
+      <div class="field" style="flex:1;min-width:150px"><label for="ap">Horas de máquina parada</label><input type="number" id="ap" step="0.25" value="0"></div>
+      <div class="field" style="flex:1;min-width:150px"><label for="ar">Horas de reparación</label><input type="number" id="ar" step="0.25" value="0"></div>
+    </div>
+  `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-doav>Registrar solicitud</button>`);
+}
+
+/* ── Visto bueno ── */
+function sheetVB(hid){
+  const h = DB.historial.find(x=>x.id===hid); if(!h) return "";
+  const m = byId(h.mid) || {nombre:h.mid};
+  return sheetShell("Visto bueno", `${esc(h.mid)} · ${esc(m.nombre)}`, "", `
+    <div class="note warn" style="margin-bottom:16px">${ICON.warn}<div><b>La máquina no vuelve a producción hasta que firmes.</b></div></div>
+    <div class="summary" style="margin-bottom:16px">
+      <div><span>Intervención</span><span>${esc(h.tarea)}</span></div>
+      <div><span>Realizado por</span><span>${esc(h.por)} · ${esc(h.hora)}</span></div>
+      <div><span>Tiempo empleado</span><span class="mono">${h.min} min</span></div>
+      ${h.noConf?`<div><span>Puntos no conformes</span><span style="color:var(--crit-ink)">${h.noConf}</span></div>`:""}
+      ${h.prov?`<div><span>Arreglo provisional</span><span style="color:var(--warn-ink)">Sí — pendiente de reparación definitiva</span></div>`:""}
+    </div>
+    <div class="chk">
+      ${["Equipo limpio y sin restos de la intervención","Sin herramientas ni piezas sueltas en la máquina","Protecciones y carenados repuestos","Sin riesgo para el producto"].map(c=>`
+        <label class="checkbig" data-vbchk><input type="checkbox"><span class="txt">${c}</span></label>`).join("")}
+    </div>
+    <div class="field" style="margin-top:16px"><label for="vbq">Firma</label>
+      <select id="vbq">${(DB.personas||[]).map(p=>`<option>${esc(p.n)}</option>`).join("")}</select></div>
+  `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-dovb="${esc(hid)}">Liberar máquina</button>`);
+}
+
+/* ══════════════ PARTE DE TRABAJO ══════════════ */
+let CHRONO = null;
+function chronoMs(){ const d=state.draft; if(!d||!d.t0) return 0; return d.acc + (d.paused?0:(Date.now()-d.t0)); }
+function chronoMin(){ return Math.max(1, Math.round(chronoMs()/60000)); }
+function fmtChrono(ms){ const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),q=s%60;
+  return (h?h+":":"")+String(m).padStart(2,"0")+":"+String(q).padStart(2,"0"); }
+function tickChrono(){ const n=document.getElementById("chrono"); if(n) n.textContent=fmtChrono(chronoMs()); }
+function stopChrono(){ if(CHRONO){ clearInterval(CHRONO); CHRONO=null; } }
+function chronoChip(){
+  const d=state.draft; if(!d||!d.t0) return "";
+  return `<div style="display:flex;align-items:center;gap:8px;flex:none">
+    <span class="pill ${d.paused?"warn":"ok"}" style="font-family:var(--fm);font-size:13px;padding:5px 11px"><i></i><span id="chrono">${fmtChrono(chronoMs())}</span></span>
+    <button class="btn ghost" data-pause style="padding:5px 9px;font-size:12.5px">${d.paused?"Reanudar":"Pausar"}</button></div>`;
+}
+function abrirParte(mid, tid){
+  const m = byId(mid); if(!m) return;
+  const t = (m.tareas||[]).find(x=>x.id===tid); if(!t) return;
+  const needFotos = t.fotos !== "No hacen falta";
+  const antes = t.fotos === "Antes y después";
+  state.draft = {mid, tid, step:0, loto:false, marks:(t.checks||[]).map(()=>null), notes:{},
+    vals:(t.medidas||[]).map(()=>""), before:null, after:null, obs:"", prov:false, provQue:"",
+    t0:Date.now(), acc:0, paused:false, manual:null, manualWhy:"", editTime:false, needFotos, antes,
+    quien:((DB.personas||[])[2]||{}).n || "Mantenimiento"};
+  if(!CHRONO) CHRONO = setInterval(tickChrono, 1000);
+  renderModal();
+}
+function sheetParte(){
+  const d = state.draft, m = byId(d.mid), t = (m.tareas||[]).find(x=>x.id===d.tid);
+  const pasos = ["Seguridad"]; if(d.antes) pasos.push("Foto de antes");
+  pasos.push("Ejecución","Cierre");
+  const N = pasos.length;
+  const steps = `<div class="steps">${pasos.map((_,i)=>`<div class="${i<d.step?"done":i===d.step?"on":""}"></div>`).join("")}</div>`;
+  const foto = (k,label,hint) => `<label class="photo ${d[k]?"filled":""}" style="aspect-ratio:3/2">
+      ${d[k]?`<img src="${d[k]}" alt="${label}">`:`${ICON.camera}<span>${label}</span><span style="font-size:11.5px;font-weight:400;opacity:.8">${hint}</span>`}
+      <span class="tag">${label.toUpperCase()}</span>
+      <input type="file" accept="image/*" capture="environment" data-photo="${k}" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>`;
+  const paso = pasos[d.step];
+  let content = "", footer = "";
+
+  if(paso==="Seguridad"){
+    const r = m.reglas || {};
+    content = `
+      ${r.loto?`<div class="note warn" style="margin-bottom:14px">${ICON.warn}<div><b>Antes de tocar nada.</b> Esta máquina exige consignación eléctrica: toda operación se hace con el suministro desconectado.</div></div>`:""}
+      ${(r.avisos||[]).map(a=>`<div class="note warn" style="margin-bottom:14px">${ICON.warn}<div>${esc(a)}</div></div>`).join("")}
+      ${r.epi?`<div class="note" style="margin-bottom:16px">${ICON.info}<div><b>EPI:</b> ${esc(r.epi)}</div></div>`:""}
+      ${r.loto?`<label class="checkbig ${d.loto?"on":""}"><input type="checkbox" data-loto ${d.loto?"checked":""}>
+        <span class="txt"><b>He desconectado el suministro eléctrico y consignado la máquina.</b><br><span style="color:var(--ink-2)">Queda registrado con tu nombre y la hora.</span></span></label>`:""}
+      ${t.desc?`<div class="note" style="margin-top:16px">${ICON.info}<div>${esc(t.desc)}</div></div>`:""}
+      <div class="summary" style="margin-top:16px">
+        <div><span>Máquina</span><span>${esc(m.id)} · ${esc(m.nombre)}</span></div>
+        <div><span>Frecuencia</span><span>${esc(freqTexto(t))}</span></div>
+        <div><span>Tiempo estimado</span><span>${hm(t.min)}</span></div>
+        <div><span>Cronómetro</span><span>En marcha desde que abriste el parte</span></div>
+      </div>`;
+    footer = `<button class="btn ghost" data-posponer>No se puede hacer</button><div class="spacer"></div>
+      <button class="btn primary" data-next ${(!m.reglas||!m.reglas.loto||d.loto)?"":"disabled"}>Empezar</button>`;
+  }
+
+  if(paso==="Foto de antes"){
+    content = `<div class="note warn" style="margin-bottom:16px">${ICON.warn}<div><b>Primero la foto, después el trabajo.</b> Hasta que no esté la foto del estado inicial no se abre la lista de comprobación.</div></div>
+      ${foto("before","Antes","Estado de la máquina o la pieza tal y como la encuentras")}
+      <div class="reqline">${ICON.info} Se comprime en la tablet antes de enviarse.</div>`;
+    footer = `<button class="btn ghost" data-back>Atrás</button><div class="spacer"></div>
+      <button class="btn primary" data-next ${d.before?"":"disabled"}>${d.before?"Continuar":"Falta la foto"}</button>`;
+  }
+
+  if(paso==="Ejecución"){
+    const checks = t.checks || [];
+    content = `
+      <p class="sub" style="margin:0 0 14px">Marca cada punto. Si algo no está conforme, se te pedirá una nota.</p>
+      <div class="chk">${checks.map((it,i)=>{
+        const v = d.marks[i];
+        return `<div class="chkitem"><div class="top">
+            <span class="lbl">${esc(it)}</span>
+            <span class="seg">
+              <button data-mark="${i}" data-v="ok" class="${v==="ok"?"on-ok":""}">Conforme</button>
+              <button data-mark="${i}" data-v="no" class="${v==="no"?"on-no":""}">No conf.</button>
+              <button data-mark="${i}" data-v="na" class="${v==="na"?"on-na":""}">N/A</button>
+            </span></div>
+          ${v==="no"?`<div style="margin-top:10px"><textarea data-note="${i}" placeholder="¿Qué has encontrado?" style="min-height:56px">${esc(d.notes[i]||"")}</textarea></div>`:""}
+        </div>`;}).join("") || `<p class="sub">Esta tarea no tiene puntos de comprobación definidos.</p>`}</div>
+      ${(t.medidas||[]).length?`<div class="field" style="margin-top:20px"><label>Valores a registrar</label>
+        <div class="linelist">${t.medidas.map((md,i)=>{
+          const v = d.vals[i], num = parseFloat(String(v).replace(",","."));
+          const fuera = v!=="" && !isNaN(num) && ((md.min!=null&&md.max!=null&&md.min!==md.max) && (num<md.min||num>md.max));
+          return `<div class="lineitem"><span style="flex:2;min-width:130px;font-size:13.5px">${esc(md.n)}</span>
+            <input type="number" step="any" data-val="${i}" value="${esc(v)}" placeholder="—" style="flex:1;min-width:80px;text-align:right">
+            <span class="mono" style="font-size:12px;color:var(--ink-3);width:44px">${esc(md.u||"")}</span>
+            ${(md.min!=null&&md.max!=null&&md.min!==md.max)?`<span class="pill ${fuera?"crit":v===""?"neut":"ok"}" style="min-width:96px"><i></i>${fuera?"Fuera de rango":`${md.min} – ${md.max}`}</span>`:""}
+          </div>`;}).join("")}</div></div>`:""}`;
+    const done = checks.every((_,i)=>d.marks[i]!==null);
+    footer = `<button class="btn ghost" data-back>Atrás</button><div class="spacer"></div>
+      <span class="sub mono" style="margin-right:6px">${d.marks.filter(v=>v!==null).length}/${checks.length}</span>
+      <button class="btn primary" data-next ${done?"":"disabled"}>Continuar</button>`;
+  }
+
+  if(paso==="Cierre"){
+    const auto = chronoMin(), mins = d.manual!==null ? d.manual : auto;
+    const noConf = d.marks.filter(v=>v==="no").length;
+    content = `
+      ${d.needFotos?`${foto("after","Después","Cómo queda el equipo tras la intervención")}
+        <div class="reqline" style="margin-bottom:18px">${ICON.info} La foto de después es obligatoria para firmar.</div>`:""}
+      <div class="field"><label>Tiempo empleado</label>
+        <div class="summary">
+          <div><span>Medido por el cronómetro</span><span class="mono">${fmtChrono(chronoMs())} · ${auto} min</span></div>
+          <div><span>Estimado por el plan</span><span class="mono">${t.min} min</span></div>
+          ${d.manual!==null?`<div><span>Corregido a mano</span><span class="mono">${d.manual} min</span></div>`:""}
+        </div>
+        ${d.editTime?`<div class="rowsplit" style="margin-top:12px">
+            <div style="flex:1;min-width:120px"><input type="number" id="mins" value="${mins}" min="1"></div>
+            <div style="flex:2;min-width:180px"><input type="text" id="whymins" value="${esc(d.manualWhy)}" placeholder="¿Por qué corriges el tiempo?"></div>
+          </div><div class="help" style="margin-top:8px">La corrección queda registrada con su motivo. El tiempo del cronómetro nunca se borra.</div>`
+        :`<div style="margin-top:10px"><button class="linkish" data-edittime>Corregir el tiempo a mano</button></div>`}</div>
+      <div class="field"><label for="obs">Observaciones</label>
+        <textarea id="obs" placeholder="Lo que quieras dejar dicho para la próxima vez">${esc(d.obs)}</textarea></div>
+      ${noConf?`<div class="note warn" style="margin-bottom:16px">${ICON.warn}<div><b>${noConf} punto${noConf>1?"s":""} no conforme${noConf>1?"s":""}.</b> Si lo has dejado funcionando con un apaño, márcalo abajo.</div></div>`:""}
+      <label class="checkbig ${d.prov?"on":""}" style="border-color:${d.prov?"var(--warn-dot)":"var(--line-2)"};background:${d.prov?"var(--warn-bg)":"var(--surface)"}">
+        <input type="checkbox" data-prov ${d.prov?"checked":""}>
+        <span class="txt"><b>Lo he dejado con un arreglo provisional.</b><br><span style="color:var(--ink-2)">Funciona, pero no es la reparación definitiva. Queda marcado en el histórico hasta que se haga bien.</span></span></label>
+      ${d.prov?`<div class="field" style="margin-top:14px"><label for="prq">¿Qué falta para la reparación definitiva?</label>
+        <input type="text" id="prq" value="${esc(d.provQue)}" placeholder="p. ej. recibir la guía LLTHC"></div>`:""}
+      <div class="field" style="margin-top:16px"><label for="quien">Firma</label>
+        <select id="quien">${(DB.personas||[]).map(p=>`<option ${p.n===d.quien?"selected":""}>${esc(p.n)}</option>`).join("")}</select></div>`;
+    const okFoto = !d.needFotos || d.after;
+    footer = `<button class="btn ghost" data-back>Atrás</button><div class="spacer"></div>
+      <button class="btn primary" data-finish ${okFoto?"":"disabled"}>${okFoto?"Firmar y cerrar parte":"Falta la foto de después"}</button>`;
+  }
+
+  return sheetShell(t.nombre, `${esc(m.id)} · ${esc(m.nombre)} · ${paso} ${d.step+1}/${N}`, steps, content, footer, chronoChip());
+}
+function sheetPosponer(){
+  const m = byId(state.draft.mid);
+  return sheetShell("No se puede realizar", `${esc(m.id)} · ${esc(m.nombre)}`, "", `
+    <div class="note" style="margin-bottom:16px">${ICON.info}<div>Posponer no es un fallo: es información. Si una tarea se pospone tres veces por producción, el problema es de planificación y conviene verlo.</div></div>
+    <div class="field"><label for="mot">Motivo</label>
+      <select id="mot"><option>Máquina en producción, no se puede parar</option><option>Falta repuesto</option><option>Falta tiempo en la jornada</option><option>Requiere técnico externo</option><option>Otro</option></select></div>
+    <div class="field"><label for="nd">Aplazar hasta</label><input type="date" id="nd" value="${esc(toISO(addDays(today(),1)))}"></div>
+    <div class="field"><label for="det">Detalle</label><textarea id="det" placeholder="Opcional"></textarea></div>
+  `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-dopos>Posponer y avisar</button>`);
+}
+
+function sheetFotos(hid){
+  const h = DB.historial.find(x=>x.id===hid); if(!h) return "";
+  const m = byId(h.mid) || {nombre:h.mid};
+  const cara = (k,l) => (h.fotos&&h.fotos[k])
+    ? `<figure><img id="img_${k}" alt="${l}" src="" style="min-height:120px;background:var(--surface-2)"><figcaption>${l}</figcaption></figure>` : "";
+  return sheetShell("Evidencias del parte", `${esc(h.mid)} · ${esc(fmtFull(parseISO(h.fecha)))}`, "", `
+    <div class="summary" style="margin-bottom:16px">
+      <div><span>Intervención</span><span>${esc(h.tarea)}</span></div>
+      <div><span>Realizado por</span><span>${esc(h.por)} · ${esc(h.hora)}</span></div>
+      <div><span>Tiempo</span><span class="mono">${h.min} min</span></div>
+    </div>
+    <div class="fotogrid">${cara("antes","Antes")}${cara("despues","Después")}</div>
+    <div class="reqline" style="margin-top:12px">${ICON.info} Los enlaces caducan en una hora: las fotos no quedan expuestas en internet.</div>
+  `, `<div class="spacer"></div><button class="btn" data-close>Cerrar</button>`);
+}
+function renderModal(){
+  const root = $("#modalRoot");
+  if(!state.modal && !state.draft && !state.td){ root.innerHTML=""; return; }
+  if(state.modal && state.modal.indexOf("fotos:")===0){
+    const hid = state.modal.slice(6);
+    root.innerHTML = sheetFotos(hid); bindModal();
+    const h = DB.historial.find(x=>x.id===hid);
+    ["antes","despues"].forEach(async k => {
+      if(!h || !h.fotos || !h.fotos[k]) return;
+      const u = await firmarFoto(h.fotos[k]);
+      const n = document.getElementById("img_"+k);
+      if(n && u) n.src = u;
+    });
+    return;
+  }
+  if(state.modal==="posponer")   root.innerHTML = sheetPosponer();
+  else if(state.modal==="averia")root.innerHTML = sheetAveria();
+  else if(state.modal==="rep")   root.innerHTML = sheetRepuesto();
+  else if(state.modal && state.modal.indexOf("vb:")===0) root.innerHTML = sheetVB(state.modal.slice(3));
+  else if(state.td)              root.innerHTML = sheetTarea();
+  else if(state.draft)           root.innerHTML = sheetParte();
+  else { root.innerHTML=""; return; }
+  bindModal();
+}
+
+/* ══════════════ EVENTOS DE MODAL ══════════════ */
+function bindModal(){
+  const root = $("#modalRoot"), q = s => root.querySelector(s);
+  const on = (s,ev,fn) => root.querySelectorAll(s).forEach(n=>n.addEventListener(ev,fn));
+  const close = () => { stopChrono(); state.modal=null; state.draft=null; state.td=null; renderModal(); };
+  on("[data-close]","click",close);
+  const scrim = root.querySelector("[data-scrim]");
+  if(scrim) scrim.onclick = e => { if(e.target===scrim) close(); };
+  document.onkeydown = e => { if(e.key==="Escape") close(); };
+
+  /* ---- editor de tarea ---- */
+  const td = state.td;
+  if(td){
+    on("[data-t]","input", e=>{ const k=e.target.dataset.t; td[k] = e.target.type==="checkbox" ? e.target.checked : e.target.value; });
+    on("[data-t]","change", e=>{ const k=e.target.dataset.t;
+      td[k] = e.target.type==="checkbox" ? e.target.checked : e.target.value;
+      if(k==="parada"||k==="unidad") renderModal(); });
+    on("[data-chk]","input", e=>{ td.checks[+e.target.dataset.chk] = e.target.value; });
+    on("[data-delchk]","click", e=>{ td.checks.splice(+e.currentTarget.dataset.delchk,1); renderModal(); });
+    on("[data-addchk]","click", ()=>{ td.checks.push(""); renderModal(); setTimeout(()=>{ const ns=root.querySelectorAll("[data-chk]"); if(ns.length) ns[ns.length-1].focus(); },0); });
+    on("[data-med]","input", e=>{ const [i,f]=e.target.dataset.med.split("|"); const v=e.target.value;
+      td.medidas[+i][f] = (f==="min"||f==="max") ? (v===""?null:parseFloat(v)) : v; });
+    on("[data-delmed]","click", e=>{ td.medidas.splice(+e.currentTarget.dataset.delmed,1); renderModal(); });
+    on("[data-addmed]","click", ()=>{ td.medidas.push({n:"",u:"",min:null,max:null}); renderModal(); });
+    on("[data-savetask]","click", async ()=>{
+      if(!td.nombre){ toast("Ponle nombre a la tarea."); return; }
+      const m = byId(state.mid); if(!m) return;
+      m.tareas = m.tareas || [];
+      const clean = {id: td._id || uid(m.id), nombre:td.nombre, desc:td.desc||"",
+        checks:(td.checks||[]).filter(c=>String(c).trim()), medidas:(td.medidas||[]).filter(x=>String(x.n).trim()),
+        unidad:td.unidad, cada:Math.max(1,+td.cada||1), min:Math.max(1,+td.min||1),
+        perfil:td.perfil, fotos:td.fotos, parada:!!td.parada, rep:td.rep||"", last:td.last||toISO(today())};
+      if(td.cadaH) clean.cadaH = +td.cadaH;
+      const i = m.tareas.findIndex(x=>x.id===clean.id);
+      if(i>=0) m.tareas[i] = Object.assign({}, m.tareas[i], clean); else m.tareas.push(clean);
+      state.td = null; renderModal(); render();
+      await guardar(i>=0 ? "Tarea actualizada." : "Tarea añadida al plan.");
+    });
+    on("[data-deltask]","click", async ()=>{
+      const m = byId(state.mid);
+      m.tareas = (m.tareas||[]).filter(x=>x.id!==td._id);
+      state.td=null; renderModal(); render(); await guardar("Tarea eliminada.");
+    });
+  }
+
+  /* ---- repuesto ---- */
+  on("[data-dorep]","click", async ()=>{
+    const g = id => { const n=q("#"+id); return n?n.value:""; };
+    if(!g("rname")){ toast("Falta la descripción."); return; }
+    const m = byId(state.mid); m.repuestos = m.repuestos || [];
+    m.repuestos.push({ref:g("rref"), name:g("rname"), stock:+g("rstock")||0, min:+g("rmin")||0,
+      prov:g("rprov")||"—", plazo:+g("rplazo")||0, nota:g("rnota")||""});
+    close(); render(); await guardar("Repuesto añadido.");
+  });
+
+  /* ---- avería ---- */
+  on("[data-doav]","click", async ()=>{
+    const g = id => { const n=q("#"+id); return n?n.value:""; };
+    if(!g("ad")){ toast("Describe qué ha pasado."); return; }
+    const d = today();
+    const n = String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+    const seq = String(DB.averias.filter(a=>String(a.id).startsWith(n)).length+1).padStart(2,"0");
+    DB.averias.push({id:n+seq, mid:g("am"), desc:g("ad"), cons:g("ac"), abierta:true,
+      fecha:toISO(d), sol:g("asol"), paro:+g("ap")||0, rep:+g("ar")||0});
+    close(); render(); await guardar(`Solicitud ${n+seq} registrada.`);
+  });
+
+  /* ---- visto bueno ---- */
+  root.querySelectorAll("[data-vbchk] input").forEach(i=>i.onchange=e=>{ e.target.closest(".checkbig").classList.toggle("on", e.target.checked); });
+  on("[data-dovb]","click", async e=>{
+    const h = DB.historial.find(x=>x.id===e.currentTarget.dataset.dovb);
+    if(h){ h.vb = true; h.vbPor = (q("#vbq")||{}).value || ""; }
+    close(); render(); await guardar("Máquina liberada para producción.");
+  });
+
+  /* ---- parte ---- */
+  const d = state.draft;
+  if(d){
+    on("[data-loto]","change", e=>{ d.loto=e.target.checked; renderModal(); });
+    on("[data-next]","click", ()=>{ d.step++; renderModal(); });
+    on("[data-back]","click", ()=>{ d.step--; renderModal(); });
+    on("[data-mark]","click", e=>{ d.marks[+e.currentTarget.dataset.mark]=e.currentTarget.dataset.v; renderModal(); });
+    on("[data-note]","input", e=>{ d.notes[+e.target.dataset.note]=e.target.value; });
+    on("[data-val]","input", e=>{ d.vals[+e.target.dataset.val]=e.target.value; });
+    on("[data-val]","change", ()=>renderModal());
+    on("[data-prov]","change", e=>{ d.prov=e.target.checked; renderModal(); });
+    on("#prq","input", e=>{ d.provQue=e.target.value; });
+    on("#obs","input", e=>{ d.obs=e.target.value; });
+    on("#quien","change", e=>{ d.quien=e.target.value; });
+    on("[data-posponer]","click", ()=>{ state.modal="posponer"; renderModal(); });
+    on("[data-pause]","click", ()=>{ if(d.paused){ d.t0=Date.now(); d.paused=false; } else { d.acc+=Date.now()-d.t0; d.paused=true; } renderModal(); });
+    on("[data-edittime]","click", ()=>{ d.editTime=true; d.manual=chronoMin(); renderModal(); });
+    on("#mins","input", e=>{ d.manual=Math.max(1,parseInt(e.target.value||"1",10)); });
+    on("#whymins","input", e=>{ d.manualWhy=e.target.value; });
+    on("[data-photo]","change", e=>{
+      const f = e.target.files && e.target.files[0]; if(!f) return;
+      const k = e.target.dataset.photo;
+      const r = new FileReader(); r.onload = () => { d[k]=r.result; renderModal(); }; r.readAsDataURL(f);
+    });
+    on("[data-dopos]","click", async ()=>{
+      const m = byId(d.mid), t = (m.tareas||[]).find(x=>x.id===d.tid);
+      const nd = (q("#nd")||{}).value;
+      if(t && nd){
+        const dias = t.unidad==="Días laborables" ? 1 : t.unidad==="Semanas" ? 7*(+t.cada||1) : t.unidad==="Meses" ? Math.round(30.44*(+t.cada||1)) : 1;
+        t.last = toISO(addDays(parseISO(nd), -dias));
+      }
+      close(); render(); await guardar("Tarea aplazada y avisado el encargado.");
+    });
+    on("[data-finish]","click", async e=>{
+      const m = byId(d.mid), t = (m.tareas||[]).find(x=>x.id===d.tid);
+      const real = d.manual!==null ? d.manual : chronoMin();
+      const e0 = estadoTarea(m,t);
+      const now = new Date();
+      const hid = uid("H");
+      const btn = e.currentTarget; btn.disabled = true; btn.textContent = "Subiendo fotos…";
+      const fotos = {};
+      if(d.before){ const r = await subirFoto(m.id+"/"+hid+"-antes.jpg", d.before);   if(r) fotos.antes = r; }
+      if(d.after){  const r = await subirFoto(m.id+"/"+hid+"-despues.jpg", d.after);  if(r) fotos.despues = r; }
+      if((d.before && !fotos.antes) || (d.after && !fotos.despues)){
+        btn.disabled = false; btn.textContent = "Firmar y cerrar parte";
+        toast("No se han podido subir las fotos. Comprueba la conexión y vuelve a intentarlo.");
+        return;
+      }
+      DB.historial.push({id: hid, fotos: fotos, mid:m.id, tid:t.id, tarea:t.nombre, fecha:toISO(today()),
+        hora: String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0"),
+        por: d.quien, min: real, minAuto: chronoMin(), motivo: d.manualWhy||"",
+        obs: d.obs||"", prov: !!d.prov, provQue: d.provQue||"",
+        noConf: d.marks.filter(v=>v==="no").length,
+        vals: (t.medidas||[]).map((md,i)=>({n:md.n, v:d.vals[i]})),
+        tarde: e0.d < 0, needVB: !!(m.reglas&&m.reglas.vb), vb: !(m.reglas&&m.reglas.vb)});
+      t.last = toISO(today());
+      if(t.unidad==="Horas de trabajo" || t.cadaH) t.lastH = horasAcum(m);
+      close(); render();
+      await guardar(d.prov ? `Parte cerrado en ${real} min. Queda marcado como arreglo provisional.` : `Parte cerrado en ${real} min.`);
+    });
+  }
+}
+
+/* ══════════════ EVENTOS DE VISTA ══════════════ */
+function bindView(){
+  const v = $("#view");
+  const on = (s,fn) => v.querySelectorAll(s).forEach(n=>n.addEventListener("click",fn));
+
+  v.querySelectorAll("[data-aj]").forEach(n=>n.addEventListener("change", e=>{
+    ajustes()[e.target.dataset.aj] = +e.target.value || 0;
+  }));
+  on("[data-saveaj]", async ()=>{ render(); await guardar("Tarifas guardadas. El coste ya se calcula solo."); });
+  on("[data-export]", async ()=>{
+    try{
+      const blob = new Blob([JSON.stringify(DB,null,2)], {type:"application/json"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "mantenimiento-dordiv-"+toISO(today())+".json";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+      toast("Copia de seguridad descargada.");
+    }catch(e){ toast("No se ha podido preparar la descarga."); }
+  });
+  on("[data-nav]", e=>{ const t=e.currentTarget.dataset.nav; if(t==="alta") altaInit(); state.view=t; render(); });
+  on("[data-mach]", e=>{ state.mid=e.currentTarget.dataset.mach; state.view="maquina"; state.tab="plan"; render(); });
+  on("[data-tab]", e=>{ state.tab=e.currentTarget.dataset.tab; render(); });
+  on("[data-open]", e=>{
+    if(RO()){ toast("Vista de solo lectura."); return; }
+    const [mid,tid] = e.currentTarget.dataset.open.split("|"); abrirParte(mid,tid);
+  });
+  on("[data-vb]", e=>{ state.modal="vb:"+e.currentTarget.dataset.vb; renderModal(); });
+  on("[data-fotos]", e=>{ state.modal="fotos:"+e.currentTarget.dataset.fotos; renderModal(); });
+  on('[data-act="averia"]', ()=>{ state.modal="averia"; renderModal(); });
+  on("[data-addpart]", ()=>{ state.modal="rep"; renderModal(); });
+  on("[data-delpart]", async e=>{
+    const m=byId(state.mid); m.repuestos.splice(+e.currentTarget.dataset.delpart,1); render(); await guardar("Repuesto eliminado.");
+  });
+  on("[data-newtask]", ()=>{
+    state.td = {_id:null, nombre:"", desc:"", checks:[""], medidas:[], unidad:"Semanas", cada:1, cadaH:"",
+      min:20, perfil:"Mantenimiento", fotos:"Antes y después", parada:true, rep:"", last:toISO(today())};
+    renderModal();
+  });
+  on("[data-edittask]", e=>{
+    const m=byId(state.mid), t=(m.tareas||[]).find(x=>x.id===e.currentTarget.dataset.edittask);
+    if(!t) return;
+    state.td = Object.assign({}, t, {_id:t.id, checks:(t.checks||[]).slice(),
+      medidas:(t.medidas||[]).map(x=>Object.assign({},x)), cadaH:t.cadaH||""});
+    renderModal();
+  });
+  on("[data-closeav]", async e=>{
+    const a=DB.averias.find(x=>x.id===e.currentTarget.dataset.closeav); if(a) a.abierta=false;
+    render(); await guardar("Parte cerrado.");
+  });
+
+  /* ficha */
+  on("[data-savemach]", async ()=>{
+    const m = byId(state.mid); const old = m.id;
+    v.querySelectorAll("[data-m]").forEach(n=>{ m[n.dataset.m] = n.value; });
+    if(m.id !== old){ DB.historial.forEach(h=>{ if(h.mid===old) h.mid=m.id; }); DB.averias.forEach(a=>{ if(a.mid===old) a.mid=m.id; }); state.mid=m.id; }
+    render(); await guardar("Ficha guardada.");
+  });
+  on("[data-delmach]", async ()=>{
+    const m = byId(state.mid);
+    if(!confirm(`¿Eliminar ${m.id} — ${m.nombre} y todo su plan? No se puede deshacer.`)) return;
+    DB.maquinas = DB.maquinas.filter(x=>x.id!==m.id);
+    state.view="maquinas"; render(); await guardar("Máquina eliminada.");
+  });
+
+  /* reglas */
+  v.querySelectorAll("[data-r]").forEach(n=>n.addEventListener("change", e=>{
+    const m=byId(state.mid); m.reglas = m.reglas||{};
+    m.reglas[e.target.dataset.r] = e.target.type==="checkbox" ? e.target.checked : e.target.value;
+    const w=e.target.closest(".checkbig"); if(w) w.classList.toggle("on", e.target.checked);
+  }));
+  v.querySelectorAll("[data-aviso]").forEach(n=>n.addEventListener("input", e=>{
+    byId(state.mid).reglas.avisos[+e.target.dataset.aviso] = e.target.value;
+  }));
+  on("[data-addaviso]", ()=>{ const m=byId(state.mid); m.reglas.avisos=m.reglas.avisos||[]; m.reglas.avisos.push(""); render(); });
+  on("[data-delaviso]", e=>{ byId(state.mid).reglas.avisos.splice(+e.currentTarget.dataset.delaviso,1); render(); });
+  on("[data-savereglas]", async ()=>{
+    const m=byId(state.mid);
+    m.reglas.avisos = (m.reglas.avisos||[]).filter(a=>String(a).trim());
+    render(); await guardar("Reglas guardadas.");
+  });
+
+  /* horas */
+  v.querySelectorAll("[data-h]").forEach(n=>n.addEventListener("change", e=>{
+    const m=byId(state.mid); m.horas = m.horas||{};
+    const k=e.target.dataset.h;
+    m.horas[k] = e.target.type==="checkbox" ? e.target.checked : (k==="acum"||k==="semana") ? (+e.target.value||0) : e.target.value;
+    const w=e.target.closest(".checkbig"); if(w) w.classList.toggle("on", e.target.checked);
+  }));
+  on("[data-hoy-horas]", ()=>{ const m=byId(state.mid); m.horas.acum = horasAcum(m); m.horas.act = toISO(today()); render(); });
+  on("[data-savehoras]", async ()=>{ render(); await guardar("Horas guardadas."); });
+
+  /* acciones y liberación */
+  v.querySelectorAll("[data-acc]").forEach(n=>n.addEventListener("change", async e=>{
+    const m=byId(state.mid), a=(m.acciones||[]).find(x=>x.n===+e.target.dataset.acc);
+    if(a){ a.est=e.target.value; await guardar("Acción actualizada."); }
+  }));
+  v.querySelectorAll("[data-lib]").forEach(n=>n.addEventListener("change", async e=>{
+    const m=byId(state.mid); m.liberacion[+e.target.dataset.lib].ok = e.target.value==="1";
+    render(); await guardar("Criterio actualizado.");
+  }));
+
+  /* alta */
+  if(state.alta){
+    const a = state.alta;
+    v.querySelectorAll("[data-a]").forEach(n=>{ n.addEventListener("input", e=>{ a.d[e.target.dataset.a]=e.target.value; });
+                                               n.addEventListener("change", e=>{ a.d[e.target.dataset.a]=e.target.value; }); });
+    v.querySelectorAll("[data-ar]").forEach(n=>n.addEventListener("change", e=>{
+      a.d.reglas[e.target.dataset.ar] = e.target.type==="checkbox" ? e.target.checked : e.target.value;
+      const w=e.target.closest(".checkbig"); if(w) w.classList.toggle("on", e.target.checked); }));
+    v.querySelectorAll("[data-aravisos]").forEach(n=>n.addEventListener("input", e=>{
+      a.d.reglas.avisos = e.target.value.split("\n").map(s=>s.trim()).filter(Boolean); }));
+    v.querySelectorAll("[data-ah]").forEach(n=>n.addEventListener("change", e=>{
+      const k=e.target.dataset.ah;
+      a.d.horas[k] = e.target.type==="checkbox" ? e.target.checked : (k==="acum"||k==="semana") ? (+e.target.value||0) : e.target.value;
+      const w=e.target.closest(".checkbig"); if(w) w.classList.toggle("on", e.target.checked); }));
+    on("[data-yn]", e=>{ a.d[e.currentTarget.dataset.yn] = e.currentTarget.dataset.v==="si"; render(); });
+    on("[data-fase]", e=>{ a.step = +e.currentTarget.dataset.fase; render(); });
+    on("[data-altafin]", async ()=>{
+      const d = a.d, id = String(d.id).toUpperCase().trim();
+      if(!id || !d.nombre){ toast("Faltan el código y el nombre."); return; }
+      if(byId(id)){ toast(`Ya existe una máquina con el código ${id}.`); return; }
+      DB.maquinas.push({id, nombre:d.nombre, grupo:d.grupo, ubic:d.ubic, resp:d.resp, fab:d.fab,
+        modelo:d.modelo, serie:d.serie, anio:d.anio, crit:altaCrit(d), doc:d.doc,
+        reglas:d.reglas, horas:Object.assign({}, d.horas, {act:toISO(today())}),
+        tareas:[], repuestos:[], lubri:[], acciones:[], liberacion:[]});
+      state.alta=null; state.mid=id; state.view="maquina"; state.tab="plan"; render();
+      await guardar(`${id} dada de alta. Añade ya sus tareas.`);
+    });
+  }
+}
+
+/* ══════════════ RENDER ══════════════ */
+function renderNav(){
+  const rail=$("#rail"), mob=$("#mobnav"), items=NAV[state.role];
+  const venc = agenda().filter(x=>x.st==="vencida").length;
+  const pvb  = DB.historial.filter(h=>h.needVB && !h.vb).length;
+  const badge = k => k==="tareas"&&venc ? `<span class="count">${venc}</span>` : k==="validaciones"&&pvb ? `<span class="count">${pvb}</span>` : "";
+  if(state.role==="mecanico"){ rail.hidden=true; mob.hidden=true; return; }
+  rail.hidden=false; mob.hidden=false;
+  const cur = k => state.view===k || (k==="maquinas" && (state.view==="maquina"||state.view==="alta"));
+  rail.innerHTML = `<div class="lbl">${state.role==="encargado"?"Encargado de planta":"Dirección"}</div>` +
+    items.map(([k,l])=>`<button data-nav2="${k}" aria-current="${cur(k)}">${l}${badge(k)}</button>`).join("");
+  mob.innerHTML = items.map(([k,l])=>`<button data-nav2="${k}" aria-current="${cur(k)}">${l}</button>`).join("");
+  [rail,mob].forEach(n=>n.querySelectorAll("[data-nav2]").forEach(b=>b.onclick=()=>{
+    const t=b.dataset.nav2; if(t==="alta") altaInit(); state.view=t; render();
+  }));
+}
+function render(){
+  renderNav();
+  const views = {tareas:viewTareas, validaciones:viewValidaciones, maquinas:viewMaquinas,
+                 maquina:viewMaquina, alta:viewAlta, repuestos:viewRepuestos,
+                 averias:viewAverias, cuadro:viewCuadro};
+  if(state.view==="alta" && !state.alta) altaInit();
+  $("#view").innerHTML = (views[state.view] || viewTareas)();
+  bindView();
+}
+
+document.querySelectorAll(".roleswitch [data-role]").forEach(b=>b.onclick=()=>{
+  if(PERFIL && PERFIL.rol !== "admin") return;
+  state.role = b.dataset.role;
+  document.querySelectorAll(".roleswitch [data-role]").forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+  state.view = state.role==="direccion" ? "cuadro" : "tareas";
+  state.mid = null; state.alta = null;
+  render();
+});
+$("#syncChip").onclick = () => toast(!CAN
+  ? "Tu usuario solo puede consultar."
+  : "Los cambios se guardan en el servidor en cuanto pulsas Guardar.");
+
+boot();
+})();
+</script>
+
