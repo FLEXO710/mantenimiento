@@ -482,7 +482,8 @@ svg.chart .ax{stroke:var(--axis);stroke-width:1;}
 
 /* ─── Comportamiento de aplicación, no de documento ─── */
 body{
-  cursor: default;                 /* nunca la barrita de escribir */
+  cursor: default;                 /* puntero de flecha, nunca de texto */
+  caret-color: transparent;        /* y ninguna barrita parpadeando */
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
@@ -494,8 +495,9 @@ button, [role="button"], [role="tab"], .rail, .mobnav, .topbar, .roleswitch,
 }
 /* Solo se escribe y se selecciona donde de verdad se escribe */
 input[type=text], input[type=number], input[type=email], input[type=password],
-input[type=date], input[type=search], textarea{
+input[type=date], input[type=search], textarea, [contenteditable]{
   cursor: text;
+  caret-color: auto;               /* aquí sí hace falta ver dónde escribes */
   -webkit-user-select: text;
   -moz-user-select: text;
   user-select: text;
