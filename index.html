@@ -482,13 +482,15 @@ svg.chart .ax{stroke:var(--axis);stroke-width:1;}
 
 /* ─── Comportamiento de aplicación, no de documento ─── */
 body{
-  cursor: default;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  user-select: none;
+  cursor: default;                 /* nunca la barrita de escribir */
   -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
   touch-action: manipulation;
+}
+/* Los controles no se seleccionan: seleccionar la etiqueta de un botón no tiene sentido */
+button, [role="button"], [role="tab"], .rail, .mobnav, .topbar, .roleswitch,
+.tabs, .seg, .pill, .code, .steps, .chev, .userchip, .sync, label.checkbig,
+.task, .mach, .hd.plegable, .kpi .k, .eyebrow, th{
+  -webkit-user-select: none; -moz-user-select: none; user-select: none;
 }
 /* Solo se escribe y se selecciona donde de verdad se escribe */
 input[type=text], input[type=number], input[type=email], input[type=password],
@@ -506,9 +508,10 @@ label.checkbig, .photo, .hd.plegable, .task, .mach, .linkish{ cursor: pointer; }
 a *, button *, [role="button"] *, [role="tab"] *,
 label.checkbig *, .photo *, .hd.plegable *, .task *, .mach *{ cursor: inherit; }
 button[disabled], button[disabled] *{ cursor: not-allowed; }
-/* Si algún día hace falta copiar algo, basta con marcarlo */
-.selectable, .selectable *{
-  -webkit-user-select: text; -moz-user-select: text; user-select: text; cursor: text;
+/* En pantalla táctil no se selecciona nada: evita el menú de copiar al mantener el dedo */
+@media (pointer: coarse){
+  body{ -webkit-user-select: none; -moz-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  input, textarea{ -webkit-user-select: text; -moz-user-select: text; user-select: text; }
 }
 ::selection{ background: var(--wash-2); color: var(--ink); }
 /* Nada de contornos de arrastre en la tablet */
@@ -2175,10 +2178,32 @@ function bindModal(){
   const root = $("#modalRoot"), q = s => root.querySelector(s);
   const on = (s,ev,fn) => root.querySelectorAll(s).forEach(n=>n.addEventListener(ev,fn));
   const close = () => { stopChrono(); state.modal=null; state.draft=null; state.td=null; renderModal(); };
-  on("[data-close]","click",close);
+  const hayBorrador = () => {
+    const t = state.td;
+    if(t) return !!(String(t.nombre||"").trim() || String(t.desc||"").trim() || (t.checks||[]).some(c=>String(c).trim()));
+    const d = state.draft;
+    if(d) return d.step > 0 || d.loto || d.before || d.marks.some(v=>v!==null);
+    return false;
+  };
+  const intentarCerrar = () => {
+    if(hayBorrador() && !confirm("Vas a cerrar sin guardar y se perderá lo que llevas escrito.\n\n¿Cerrar de todas formas?")) return;
+    close();
+  };
+  on("[data-close]","click", intentarCerrar);
+  // Solo se cierra si el clic empieza Y termina sobre el fondo.
+  // Si arrastras para seleccionar texto y sueltas fuera, la ventana se queda.
   const scrim = root.querySelector("[data-scrim]");
-  if(scrim) scrim.onclick = e => { if(e.target===scrim) close(); };
-  document.onkeydown = e => { if(e.key==="Escape") close(); };
+  if(scrim){
+    let empezoFuera = false;
+    scrim.addEventListener("pointerdown", e => { empezoFuera = (e.target === scrim); });
+    scrim.addEventListener("pointerup",   e => {
+      const cerrar = empezoFuera && e.target === scrim;
+      empezoFuera = false;
+      if(cerrar) intentarCerrar();
+    });
+    scrim.addEventListener("click", e => { if(e.target === scrim) e.stopPropagation(); });
+  }
+  document.onkeydown = e => { if(e.key==="Escape") intentarCerrar(); };
 
   /* ---- editor de tarea ---- */
   const td = state.td;
