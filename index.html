@@ -454,6 +454,7 @@ svg.chart .ax{stroke:var(--axis); stroke-width:1;}
 .gatebox h1{font-size:20px;margin:0 0 6px;}
 .gatebox .lead{color:var(--ink-2);font-size:13.5px;line-height:1.55;margin:0 0 20px;}
 .gateerr{background:var(--crit-bg);color:var(--crit-ink);border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:16px;line-height:1.45;}
+.gateok{background:var(--ok-bg);color:var(--ok-ink);border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:16px;line-height:1.45;}
 .userchip{display:flex;align-items:center;gap:9px;font-size:13px;background:rgba(255,255,255,.12);padding:5px 6px 5px 12px;border-radius:999px;white-space:nowrap;}
 :root[data-theme="dark"] .userchip{background:rgba(255,255,255,.07);}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .userchip{background:rgba(255,255,255,.07);} }
@@ -676,6 +677,15 @@ const freqPill = (s) => {
 /* Configuración del servidor. Si se rellena aquí, nadie tiene que escribirla. */
 const CFG_INTEGRADA = {url:"https://rwpywrohfnifkunjfrov.supabase.co", key:"sb_publishable_uYQ_5iQqZ3ee3gOAqtS1IQ_JuQluUUG"};
 
+/* ── Recuperación de contraseña: ¿el correo lleva código de 6 cifras? ──
+   Supabase solo deja editar la plantilla del correo si el proyecto tiene
+   SMTP propio. Con el correo gratuito de Supabase la plantilla es fija y
+   trae solo el enlace, así que aquí va false y la pantalla pide pulsarlo.
+   El día que se configure SMTP: pon el código en la plantilla con la
+   variable {{ .Token }}, cambia esto a true y ya está. El resto del
+   circuito (canjearCodigo) ya está hecho y probado. */
+const CODIGO_EN_CORREO = false;
+
 const K_CFG = "dordiv.cfg", K_SES = "dordiv.ses";
 let CFG=null, SES=null, PERFIL=null, VER=0, SAVING=false, CAN=false;
 const SEMILLA = JSON.parse(JSON.stringify(DB));
@@ -687,6 +697,35 @@ if(CFG_INTEGRADA.url && CFG_INTEGRADA.key) CFG = CFG_INTEGRADA;
 const base = () => String(CFG.url||"").replace(/\/+$/,"");
 function guardaCfg(c){ CFG=c; try{ localStorage.setItem(K_CFG, JSON.stringify(c)); }catch(e){} }
 function guardaSes(s){ SES=s; try{ s ? localStorage.setItem(K_SES, JSON.stringify(s)) : localStorage.removeItem(K_SES); }catch(e){} }
+
+/* ── Vuelta del enlace de recuperación ──────────────────────────────
+   Supabase devuelve al usuario a esta misma página con la sesión metida
+   en el fragmento de la URL:
+     #access_token=…&refresh_token=…&type=recovery
+   o, si el enlace ya no vale:
+     #error=access_denied&error_code=otp_expired&error_description=…
+   Se lee antes de arrancar y se limpia la barra de direcciones, para que
+   un F5 no vuelva a disparar la pantalla ni deje el token a la vista. */
+let RECUP = null;
+(function leerEnlaceDelCorreo(){
+  const h = String(location.hash || "").replace(/^#/, "");
+  if(!h || h.indexOf("=") < 0) return;
+  let p; try{ p = new URLSearchParams(h); }catch(e){ return; }
+  const esRecup = p.get("type") === "recovery" && p.get("access_token");
+  const hayErr  = p.get("error") || p.get("error_code");
+  if(!esRecup && !hayErr) return;
+  if(esRecup){
+    guardaSes({access_token: p.get("access_token"), refresh_token: p.get("refresh_token") || "",
+               token_type: p.get("token_type") || "bearer", expires_in: +(p.get("expires_in") || 3600)});
+    RECUP = {ok:true};
+  } else {
+    RECUP = {error: (p.get("error_code") === "otp_expired")
+      ? "Ese enlace ya no vale: solo sirve una vez y caduca a la hora. Pide otro."
+      : (p.get("error_description") || "El enlace no es válido. Pide otro correo.")};
+  }
+  try{ history.replaceState(null, "", location.pathname + location.search); }
+  catch(e){ location.hash = ""; }
+})();
 function H(json, auth){
   if(auth===undefined) auth = true;
   const h = {apikey: CFG.key};
@@ -726,6 +765,45 @@ async function entrar(email, pass){
   guardaSes(j);
 }
 function salir(){ guardaSes(null); location.reload(); }
+
+/* Pide a Supabase el correo con el enlace. Responde 200 exista o no el
+   usuario: no se le dice a nadie qué correos están dados de alta. */
+async function pedirRecuperacion(email){
+  const destino = location.origin + location.pathname;
+  const r = await fetch(base()+"/auth/v1/recover?redirect_to="+encodeURIComponent(destino),
+    {method:"POST", headers:{apikey:CFG.key,"Content-Type":"application/json"},
+     body: JSON.stringify({email:email})});
+  if(r.ok) return;
+  const j = await r.json().catch(()=>({}));
+  if(r.status === 429) throw new Error("Se han pedido demasiados correos seguidos. Espera unos minutos y vuelve a intentarlo.");
+  throw new Error(j.error_description || j.msg || j.message || "No se ha podido enviar el correo ("+r.status+").");
+}
+/* Canjea el código de 6 cifras del correo por una sesión. No depende de
+   ningún enlace, así que no lo estropean los antivirus de correo que
+   "visitan" los enlaces antes que el destinatario. */
+async function canjearCodigo(email, token){
+  const r = await fetch(base()+"/auth/v1/verify", {method:"POST",
+    headers:{apikey:CFG.key,"Content-Type":"application/json"},
+    body: JSON.stringify({type:"recovery", email:email, token:token})});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok || !j.access_token){
+    const m = j.error_description || j.msg || j.message || "";
+    if(/expired|invalid/i.test(m)) throw new Error("El código no es correcto o ya ha caducado. Pide otro correo.");
+    throw new Error(m || "No se ha podido comprobar el código ("+r.status+").");
+  }
+  guardaSes(j);
+}
+
+/* Fija la contraseña del usuario de la sesión actual. */
+async function fijarPass(nueva){
+  const r = await rest("/auth/v1/user", {method:"PUT", headers:H(true), body: JSON.stringify({password:nueva})});
+  if(r.ok) return;
+  const j = await r.json().catch(()=>({}));
+  const m = j.error_description || j.msg || j.message || "";
+  if(/different from the old/i.test(m)) throw new Error("La contraseña nueva tiene que ser distinta de la anterior.");
+  if(r.status === 401 || r.status === 403) throw new Error("El enlace ha caducado. Vuelve a pedir el correo de recuperación.");
+  throw new Error(m || "No se ha podido cambiar la contraseña ("+r.status+").");
+}
 
 async function cargarPerfil(){
   const r = await rest("/rest/v1/perfiles?select=nombre,rol&limit=1", {headers:H()});
@@ -848,7 +926,7 @@ function pantallaLogin(err){
     <div class="field"><label for="l_mail">Correo</label><input type="email" id="l_mail" autocomplete="username"></div>
     <div class="field"><label for="l_pass">Contraseña</label><input type="password" id="l_pass" autocomplete="current-password"></div>
     <button class="btn primary big" id="l_ok">Entrar</button>
-    <div style="margin-top:16px;text-align:center"><button class="linkish" id="l_cfg">Cambiar de servidor</button></div>
+    <div style="margin-top:16px;text-align:center;display:flex;flex-direction:column;gap:11px"><button class="linkish" id="l_olvido">He olvidado mi contraseña</button><button class="linkish" id="l_cfg">Cambiar de servidor</button></div>
   </div>`);
   const go = async () => {
     const b = document.getElementById("l_ok"); b.disabled = true; b.textContent = "Entrando…";
@@ -859,19 +937,97 @@ function pantallaLogin(err){
   };
   document.getElementById("l_ok").onclick = go;
   document.getElementById("l_pass").onkeydown = e => { if(e.key==="Enter") go(); };
+  document.getElementById("l_olvido").onclick = () => pantallaOlvido();
   document.getElementById("l_cfg").onclick = () => pantallaConfig();
 }
+function volverDelOlvido(){ if(SES && SES.access_token) boot(); else pantallaLogin(); }
+
+function pantallaOlvido(err, enviadoA, valor){
+  if(enviadoA){
+    gate(`<div class="gatebox">${marca}
+      <h1>Mira tu correo</h1>
+      <p class="lead">Si <b>${esc(enviadoA)}</b> es de un usuario de la plataforma, ahí tienes ${CODIGO_EN_CORREO ? "un código de 6 cifras. Escríbelo aquí. El correo trae también un enlace, por si prefieres pulsarlo." : "un enlace. Púlsalo y te trae de vuelta aquí para elegir la contraseña nueva."}</p>
+      ${err?`<div class="gateerr">${esc(err)}</div>`:""}
+      ${CODIGO_EN_CORREO ? `<div class="field"><label for="o_cod">Código</label>
+        <input type="text" id="o_cod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"
+               style="font-family:var(--fm);font-size:22px;letter-spacing:.35em;text-align:center"></div>
+      <button class="btn primary big" id="o_cod_ok">Continuar</button>` : ""}
+      <div class="gateok" style="margin:16px 0 0">${CODIGO_EN_CORREO ? "Caduca" : "El enlace caduca"} en una hora${CODIGO_EN_CORREO ? "" : " y solo sirve una vez"}. Si no ves el correo en unos minutos, mira en la carpeta de correo no deseado.</div>
+      <div style="margin-top:16px;text-align:center;display:flex;flex-direction:column;gap:11px">
+        <button class="linkish" id="o_reenv">Enviarme otro correo</button>
+        <button class="linkish" id="o_atras">Volver</button></div>
+    </div>`);
+    const goCod = async () => {
+      const cod = document.getElementById("o_cod").value.replace(/\s/g, "");
+      if(cod.length < 6){ pantallaOlvido("Escribe las 6 cifras del código.", enviadoA); return; }
+      const b = document.getElementById("o_cod_ok"); b.disabled = true; b.textContent = "Comprobando…";
+      try{ await canjearCodigo(enviadoA, cod); RECUP = null; pantallaNueva(); }
+      catch(e){ pantallaOlvido(e.message, enviadoA); }
+    };
+    if(CODIGO_EN_CORREO){
+      document.getElementById("o_cod_ok").onclick = goCod;
+      document.getElementById("o_cod").onkeydown = e => { if(e.key==="Enter") goCod(); };
+      setTimeout(()=>{ const c=document.getElementById("o_cod"); if(c) c.focus(); }, 0);
+    }
+    document.getElementById("o_reenv").onclick = () => pantallaOlvido(null, null, enviadoA);
+    document.getElementById("o_atras").onclick = volverDelOlvido;
+    return;
+  }
+  gate(`<div class="gatebox">${marca}
+    <h1>Recuperar la contraseña</h1>
+    <p class="lead">Escribe tu correo y te llega ${CODIGO_EN_CORREO ? "un código de 6 cifras" : "un enlace"} para ponerte una nueva. No hace falta que nadie te la cambie.</p>
+    ${err?`<div class="gateerr">${esc(err)}</div>`:""}
+    <div class="field"><label for="o_mail">Correo</label><input type="email" id="o_mail" autocomplete="username" value="${esc(valor||"")}"></div>
+    <button class="btn primary big" id="o_ok">${CODIGO_EN_CORREO ? "Enviarme el código" : "Enviarme el enlace"}</button>
+    <div style="margin-top:16px;text-align:center"><button class="linkish" id="o_atras">Volver</button></div>
+  </div>`);
+  const go = async () => {
+    const mail = document.getElementById("o_mail").value.trim();
+    if(!mail || mail.indexOf("@") < 1){ pantallaOlvido("Escribe un correo válido.", null, mail); return; }
+    const b = document.getElementById("o_ok"); b.disabled = true; b.textContent = "Enviando…";
+    try{ await pedirRecuperacion(mail); pantallaOlvido(null, mail); }
+    catch(e){ pantallaOlvido(e.message, null, mail); }
+  };
+  document.getElementById("o_ok").onclick = go;
+  document.getElementById("o_mail").onkeydown = e => { if(e.key==="Enter") go(); };
+  document.getElementById("o_atras").onclick = volverDelOlvido;
+}
+
+function pantallaNueva(err){
+  gate(`<div class="gatebox">${marca}
+    <h1>Elige tu contraseña</h1>
+    <p class="lead">Escríbela dos veces. Mínimo 8 caracteres. En cuanto la guardes entras directamente, sin volver a la pantalla de acceso.</p>
+    ${err?`<div class="gateerr">${esc(err)}</div>`:""}
+    <div class="field"><label for="n_p1">Contraseña nueva</label><input type="password" id="n_p1" autocomplete="new-password"></div>
+    <div class="field"><label for="n_p2">Repítela</label><input type="password" id="n_p2" autocomplete="new-password"></div>
+    <button class="btn primary big" id="n_ok">Guardar y entrar</button>
+  </div>`);
+  const go = async () => {
+    const p1 = document.getElementById("n_p1").value, p2 = document.getElementById("n_p2").value;
+    if(p1.length < 8){ pantallaNueva("La contraseña tiene que tener 8 caracteres como mínimo."); return; }
+    if(p1 !== p2){ pantallaNueva("Las dos contraseñas no coinciden."); return; }
+    const b = document.getElementById("n_ok"); b.disabled = true; b.textContent = "Guardando…";
+    try{ await fijarPass(p1); boot(); }
+    catch(e){ pantallaNueva(e.message); }
+  };
+  document.getElementById("n_ok").onclick = go;
+  document.getElementById("n_p2").onkeydown = e => { if(e.key==="Enter") go(); };
+}
+
 function pintarUsuario(){
   const c = document.getElementById("userChip");
   const rol = {admin:"Administrador", mantenimiento:"Mantenimiento", encargado:"Encargado", direccion:"Dirección"}[PERFIL.rol] || PERFIL.rol;
   c.hidden = false;
-  c.innerHTML = `<span><b>${esc(PERFIL.nombre)}</b> · ${esc(rol)}</span><button id="btnSalir">Salir</button>`;
+  c.innerHTML = `<span><b>${esc(PERFIL.nombre)}</b> · ${esc(rol)}</span><button id="btnPass" title="Cambiar mi contraseña">Contraseña</button><button id="btnSalir">Salir</button>`;
+  document.getElementById("btnPass").onclick = () => { state.modal = "pass"; renderModal(); };
   document.getElementById("btnSalir").onclick = salir;
   const rs = document.getElementById("roleSwitch");
   rs.hidden = PERFIL.rol !== "admin";
 }
 async function boot(){
   if(!CFG || !CFG.url || !CFG.key){ pantallaConfig(); return; }
+  if(RECUP && RECUP.error){ const msg = RECUP.error; RECUP = null; pantallaOlvido(msg); return; }
+  if(RECUP && RECUP.ok){ RECUP = null; pantallaNueva(); return; }
   if(!SES || !SES.access_token){ pantallaLogin(); return; }
   try{
     PERFIL = await cargarPerfil();
@@ -1994,6 +2150,15 @@ function sheetVB(hid){
   `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-dovb="${esc(hid)}">Liberar máquina</button>`);
 }
 
+/* ── Cambiar mi contraseña ── */
+function sheetPass(){
+  return sheetShell("Cambiar mi contraseña", esc((PERFIL&&PERFIL.nombre)||""), "", `
+    <p style="margin:0 0 18px;color:var(--ink-2);font-size:13.5px;line-height:1.55">Mínimo 8 caracteres. No se cierra la sesión: sigues dentro con la nueva.</p>
+    <div class="field"><label for="p_p1">Contraseña nueva</label><input type="password" id="p_p1" autocomplete="new-password"></div>
+    <div class="field"><label for="p_p2">Repítela</label><input type="password" id="p_p2" autocomplete="new-password"></div>
+  `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-dopass>Guardar</button>`);
+}
+
 /* ══════════════ PARTE DE TRABAJO ══════════════ */
 let CHRONO = null;
 function chronoMs(){ const d=state.draft; if(!d||!d.t0) return 0; return d.acc + (d.paused?0:(Date.now()-d.t0)); }
@@ -2169,6 +2334,7 @@ function renderModal(){
   else if(state.modal==="averia")root.innerHTML = sheetAveria();
   else if(state.modal==="rep")   root.innerHTML = sheetRepuesto();
   else if(state.modal && state.modal.indexOf("vb:")===0) root.innerHTML = sheetVB(state.modal.slice(3));
+  else if(state.modal==="pass") root.innerHTML = sheetPass();
   else if(state.td)              root.innerHTML = sheetTarea();
   else if(state.draft)           root.innerHTML = sheetParte();
   else { root.innerHTML=""; return; }
@@ -2206,6 +2372,18 @@ function bindModal(){
     scrim.addEventListener("click", e => { if(e.target === scrim) e.stopPropagation(); });
   }
   document.onkeydown = e => { if(e.key==="Escape") intentarCerrar(); };
+
+  /* ---- cambiar mi contraseña ---- */
+  if(state.modal === "pass"){
+    on("[data-dopass]","click", async e => {
+      const p1 = (q("#p_p1")||{}).value || "", p2 = (q("#p_p2")||{}).value || "";
+      if(p1.length < 8){ toast("La contraseña tiene que tener 8 caracteres como mínimo."); return; }
+      if(p1 !== p2){ toast("Las dos contraseñas no coinciden."); return; }
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Guardando…";
+      try{ await fijarPass(p1); close(); toast("Contraseña cambiada."); }
+      catch(err){ b.disabled = false; b.textContent = "Guardar"; toast(err.message); }
+    });
+  }
 
   /* ---- editor de tarea ---- */
   const td = state.td;
