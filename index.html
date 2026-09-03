@@ -460,6 +460,18 @@ svg.chart .ax{stroke:var(--axis); stroke-width:1;}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .userchip{background:rgba(255,255,255,.07);} }
 .userchip button{border:0;background:transparent;color:inherit;opacity:.75;font-size:12.5px;padding:3px 9px;border-radius:999px;}
 .userchip button:hover{opacity:1;background:rgba(255,255,255,.14);}
+/* ── Zona de arrastre de documentos ── */
+.dropzone{display:flex;align-items:center;gap:13px;padding:20px;border:1.5px dashed var(--line-2);
+  border-radius:10px;background:var(--surface-2);color:var(--ink-2);cursor:pointer;
+  transition:background .15s ease, border-color .15s ease;}
+.dropzone:hover{border-color:var(--brand);background:var(--wash);}
+.dropzone.over{border-color:var(--brand);border-style:solid;background:var(--wash-2);}
+.dropzone:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+.dropzone svg{flex:none;color:var(--brand);}
+.dropzone b{display:block;font-size:13.5px;color:var(--ink);}
+.dropzone span{display:block;font-size:12.5px;margin-top:3px;line-height:1.45;}
+@media (prefers-reduced-motion: reduce){ .dropzone{transition:none;} }
+
 .fotogrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .fotogrid figure{margin:0;}
 .fotogrid img{width:100%;border-radius:9px;display:block;border:1px solid var(--line);}
@@ -919,6 +931,36 @@ async function borrarDoc(ruta){
   catch(e){ return false; }
 }
 const pesoDoc = (kb) => kb >= 1024 ? nfmt(kb/1024,1)+" MB" : nfmt(kb)+" KB";
+
+/* Sube uno o varios PDF a la máquina abierta. Los que no valen se apartan
+   y se dicen; los que valen se suben de uno en uno y se guarda una sola vez. */
+async function subirDocs(files){
+  const m = byId(state.mid);
+  if(!m || !files || !files.length) return;
+  const buenos = [], noPdf = [], grandes = [];
+  Array.prototype.forEach.call(files, f => {
+    if(!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) noPdf.push(f);
+    else if(f.size > MAX_DOC_MB*1024*1024) grandes.push(f);
+    else buenos.push(f);
+  });
+  if(noPdf.length)   toast(noPdf.length===1 ? "«"+noPdf[0].name+"» no es un PDF." : noPdf.length+" archivos no son PDF y se quedan fuera.");
+  else if(grandes.length) toast(grandes.length===1 ? "«"+grandes[0].name+"» pasa de "+MAX_DOC_MB+" MB." : grandes.length+" archivos pasan de "+MAX_DOC_MB+" MB.");
+  if(!buenos.length) return;
+  m.docs = m.docs || [];
+  let ok = 0;
+  for(let i=0; i<buenos.length; i++){
+    const f = buenos[i];
+    toast(buenos.length>1 ? "Subiendo "+(i+1)+" de "+buenos.length+": "+f.name : "Subiendo «"+f.name+"»…");
+    const ruta = m.id+"/"+uid("doc")+".pdf";
+    if(await subirDoc(ruta, f)){
+      m.docs.push({n:f.name.replace(/\.pdf$/i,""), ruta:ruta, kb:Math.round(f.size/1024), fecha:toISO(today())});
+      ok++;
+    }
+  }
+  if(!ok){ toast("No se ha podido subir. Comprueba la conexión y que el almacén «manuales» esté creado."); return; }
+  render();
+  await guardar(ok===1 ? "Documento añadido a la ficha." : ok+" documentos añadidos a la ficha.");
+}
 
 /* ── Pantallas de acceso ── */
 function gate(html){
@@ -1390,10 +1432,13 @@ function tarjetaDocs(m){
             ${RO()?"":`<button class="btn ghost" data-deldoc="${i}" style="padding:3px 8px">Quitar</button>`}</td>
       </tr>`).join("")}</tbody></table></div>`
     :`<div class="emptystate"><h3>Sin documentación cargada</h3><p>Sube aquí el manual del fabricante, los esquemas eléctricos o el despiece. Quien tenga una duda delante de la máquina lo abre desde la tablet sin buscar en ninguna carpeta.</p></div>`}
-    ${RO()?"":`<div class="bd" style="display:flex;gap:10px;align-items:center">
-      <input type="file" id="docfile" accept="application/pdf,.pdf" style="display:none">
-      <button class="btn" data-adddoc>${ICON.plus} Subir un PDF</button>
-      <span class="sub" style="font-size:12.5px">Solo PDF, hasta ${MAX_DOC_MB} MB. Hace falta cobertura para abrirlos.</span>
+    ${RO()?"":`<div class="bd">
+      <input type="file" id="docfile" accept="application/pdf,.pdf" multiple style="display:none">
+      <div class="dropzone" id="dropdocs" role="button" tabindex="0" aria-label="Añadir documentos a la ficha">
+        ${ICON.plus}
+        <div><b>Arrastra aquí los PDF</b>
+          <span>O pulsa para elegirlos. Puedes soltar varios de golpe. Hasta ${MAX_DOC_MB} MB cada uno; hace falta cobertura para abrirlos después.</span></div>
+      </div>
     </div>`}
   </div>`;
 }
@@ -2684,22 +2729,34 @@ function bindView(){
     DB.personas = (DB.personas||[]).filter(x=>String(x.n||"").trim());
     render(); await guardar("Equipo actualizado.");
   });
-  on("[data-adddoc]", ()=>{ const f=document.getElementById("docfile"); if(f) f.click(); });
   const inpDoc = v.querySelector("#docfile");
   if(inpDoc) inpDoc.addEventListener("change", async e=>{
-    const file = e.target.files && e.target.files[0]; if(!file) return;
+    // FileList es viva: hay que copiarla ANTES de vaciar el input,
+    // o al limpiarlo se queda sin archivos y no se sube nada.
+    const fs = Array.prototype.slice.call(e.target.files);
     e.target.value = "";
-    const m = byId(state.mid); if(!m) return;
-    if(!/pdf/i.test(file.type) && !/\.pdf$/i.test(file.name)){ toast("De momento solo PDF."); return; }
-    if(file.size > MAX_DOC_MB*1024*1024){ toast("El archivo pasa de "+MAX_DOC_MB+" MB. Divídelo o comprímelo."); return; }
-    toast("Subiendo «"+file.name+"»…");
-    const ruta = m.id+"/"+uid("doc")+".pdf";
-    const ok = await subirDoc(ruta, file);
-    if(!ok){ toast("No se ha podido subir. Comprueba la conexión y que el almacén «manuales» esté creado."); return; }
-    m.docs = m.docs || [];
-    m.docs.push({n:file.name.replace(/\.pdf$/i,""), ruta:ruta, kb:Math.round(file.size/1024), fecha:toISO(today())});
-    render(); await guardar("Documento añadido a la ficha.");
+    await subirDocs(fs);
   });
+  const zona = v.querySelector("#dropdocs");
+  if(zona){
+    zona.addEventListener("click", ()=>{ if(inpDoc) inpDoc.click(); });
+    zona.addEventListener("keydown", e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); if(inpDoc) inpDoc.click(); } });
+    ["dragenter","dragover"].forEach(ev => zona.addEventListener(ev, e=>{
+      e.preventDefault(); e.stopPropagation();
+      if(e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      zona.classList.add("over");
+    }));
+    ["dragleave","dragend"].forEach(ev => zona.addEventListener(ev, e=>{
+      e.preventDefault();
+      if(ev==="dragleave" && zona.contains(e.relatedTarget)) return;   // moverse por dentro no cuenta como salir
+      zona.classList.remove("over");
+    }));
+    zona.addEventListener("drop", async e=>{
+      e.preventDefault(); e.stopPropagation();
+      zona.classList.remove("over");
+      await subirDocs(e.dataTransfer && e.dataTransfer.files);
+    });
+  }
   on("[data-verdoc]", async e=>{
     const m = byId(state.mid), d = m && (m.docs||[])[+e.currentTarget.dataset.verdoc];
     if(!d) return;
@@ -2884,6 +2941,11 @@ document.querySelectorAll(".roleswitch [data-role]").forEach(b=>b.onclick=()=>{
 $("#syncChip").onclick = () => toast(!CAN
   ? "Tu usuario solo puede consultar."
   : "Los cambios se guardan en el servidor en cuanto pulsas Guardar.");
+
+/* Soltar un PDF fuera de la zona abriría el archivo y se llevaría por
+   delante la pantalla, con lo que hubiera escrito sin guardar. */
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop",     e => e.preventDefault());
 
 boot();
 })();
