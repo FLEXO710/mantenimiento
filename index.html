@@ -687,7 +687,7 @@ const CFG_INTEGRADA = {url:"https://rwpywrohfnifkunjfrov.supabase.co", key:"sb_p
 const CODIGO_EN_CORREO = false;
 
 const K_CFG = "dordiv.cfg", K_SES = "dordiv.ses";
-let CFG=null, SES=null, PERFIL=null, VER=0, SAVING=false, CAN=false;
+let CFG=null, SES=null, PERFIL=null, VER=0, SAVING=false, CAN=false, PUEDE_PLAN=false, PUEDE_VB=false;
 const SEMILLA = JSON.parse(JSON.stringify(DB));
 
 try{ CFG = JSON.parse(localStorage.getItem(K_CFG) || "null"); }catch(e){}
@@ -806,7 +806,11 @@ async function fijarPass(nueva){
 }
 
 async function cargarPerfil(){
-  const r = await rest("/rest/v1/perfiles?select=nombre,rol&limit=1", {headers:H()});
+  /* Se piden también las columnas de permiso. Si todavía no están creadas,
+     PostgREST responde 400 y se vuelve a pedir lo básico: así la aplicación
+     funciona igual antes y después de la migración. */
+  let r = await rest("/rest/v1/perfiles?select=nombre,rol,edita_plan,valida&limit=1", {headers:H()});
+  if(r.status === 400) r = await rest("/rest/v1/perfiles?select=nombre,rol&limit=1", {headers:H()});
   if(!r.ok) throw new Error("No se ha podido leer tu perfil ("+r.status+"). ¿Está creada la tabla «perfiles»?");
   const j = await r.json();
   return j[0] || null;
@@ -829,6 +833,13 @@ async function cargarEstado(){
   DB.grupos    = DB.grupos    || ["Producción"];
   DB.personas  = DB.personas  || [];
   DB.ajustes   = DB.ajustes   || {tarifaHora:0, costeParoHora:0};
+  DB.personas  = (DB.personas||[]).map(p => Object.assign({r:"", mail:"", perfil:"encargado", plan:false, vb:false}, p));
+  /* Los responsables de máquina son su propia lista: puede haber un área
+     ("Almacén") que no es ninguna persona del equipo. */
+  if(!Array.isArray(DB.responsables)){
+    const de = DB.maquinas.map(m=>m.resp).filter(Boolean);
+    DB.responsables = Array.from(new Set(de.concat(DB.personas.map(p=>p.n)))).filter(Boolean);
+  }
 }
 async function guardar(msg){
   if(SAVING) return false;
@@ -881,15 +892,33 @@ async function subirFoto(ruta, dataUrl){
     return r.ok ? ruta : null;
   }catch(e){ return null; }
 }
-async function firmarFoto(ruta){
+async function firmar(bucket, ruta){
   try{
-    const r = await rest("/storage/v1/object/sign/evidencias/"+ruta, {method:"POST",
+    const r = await rest("/storage/v1/object/sign/"+bucket+"/"+ruta, {method:"POST",
       headers:H(true), body: JSON.stringify({expiresIn:3600})});
     if(!r.ok) return null;
     const j = await r.json();
     return base()+"/storage/v1"+(j.signedURL||j.signedUrl||"");
   }catch(e){ return null; }
 }
+const firmarFoto = (ruta) => firmar("evidencias", ruta);
+
+/* Manuales y documentación de máquina. Van a su propio almacén privado
+   ("manuales"), no al de evidencias: son ficheros grandes y de otra vida. */
+const MAX_DOC_MB = 50;
+async function subirDoc(ruta, file){
+  try{
+    const r = await rest("/storage/v1/object/manuales/"+ruta, {method:"POST",
+      headers: Object.assign(H(false), {"Content-Type": file.type || "application/pdf", "x-upsert":"true"}),
+      body: file});
+    return r.ok ? ruta : null;
+  }catch(e){ return null; }
+}
+async function borrarDoc(ruta){
+  try{ const r = await rest("/storage/v1/object/manuales/"+ruta, {method:"DELETE", headers:H(true)}); return r.ok; }
+  catch(e){ return false; }
+}
+const pesoDoc = (kb) => kb >= 1024 ? nfmt(kb/1024,1)+" MB" : nfmt(kb)+" KB";
 
 /* ── Pantallas de acceso ── */
 function gate(html){
@@ -1038,6 +1067,12 @@ async function boot(){
     return;
   }
   CAN = ["admin","mantenimiento","encargado"].indexOf(PERFIL.rol) > -1;
+  /* CAN        · puede escribir en el servidor (ejecutar partes, averías, stock)
+     PUEDE_PLAN · puede tocar el plan: máquinas, tareas, reglas, repuestos
+     PUEDE_VB   · puede firmar el visto bueno que devuelve la máquina a producción
+     El administrador lo puede todo. Del resto decide su perfil en la base de datos. */
+  PUEDE_PLAN = CAN && (PERFIL.rol === "admin" || PERFIL.edita_plan === true);
+  PUEDE_VB   = CAN && (PERFIL.rol === "admin" || PERFIL.valida === true);
   state.role = PERFIL.rol === "direccion" ? "direccion" : PERFIL.rol === "mantenimiento" ? "mecanico" : "encargado";
   state.view = state.role === "direccion" ? "cuadro" : "tareas";
   gate("");
@@ -1050,10 +1085,66 @@ async function boot(){
 const state = {role:"encargado", view:"tareas", mid:null, tab:"plan", modal:null, draft:null, alta:null, td:null, repAbierto:{}};
 const NAV = {
   mecanico:  [["tareas","Mis tareas"],["maquinas","Máquinas"],["averias","Averías"]],
-  encargado: [["tareas","Tareas"],["validaciones","Validaciones"],["maquinas","Máquinas"],["repuestos","Repuestos"],["averias","Averías"],["cuadro","Cuadro de mando"]],
+  encargado: [["tareas","Tareas"],["validaciones","Validaciones"],["maquinas","Máquinas"],["repuestos","Repuestos"],["averias","Averías"],["cuadro","Cuadro de mando"],["equipo","Equipo"]],
   direccion: [["cuadro","Cuadro de mando"],["maquinas","Máquinas"],["averias","Averías"],["repuestos","Repuestos"]],
 };
-const RO = () => state.role === "direccion" || !CAN;
+/* Solo lectura del PLAN. Ejecutar partes es otra cosa: mira EJEC(). */
+const RO   = () => state.role === "direccion" || !CAN || !PUEDE_PLAN;
+/* Puede ejecutar: abrir y cerrar partes, registrar averías, corregir stock. */
+const EJEC = () => state.role !== "direccion" && CAN;
+
+const PERFILES_ACCESO = [["mecanico","Mecánico"],["encargado","Encargado"],["direccion","Dirección"]];
+/* El valor guardado en la máquina se ofrece siempre, aunque ya no esté en la
+   lista: así cambiar la lista nunca reasigna una máquina por su cuenta. */
+function optResp(sel){
+  const l = (DB.responsables||[]).slice();
+  if(sel && l.indexOf(sel) < 0) l.unshift(sel);
+  if(!l.length) l.push("");
+  return l.map(x=>`<option ${x===sel?"selected":""}>${esc(x)}</option>`).join("");
+}
+
+/* ══════════════ VISTA · EQUIPO ══════════════ */
+function viewEquipo(){
+  const rs = DB.responsables || [], ps = DB.personas || [];
+  const ro = RO();
+  const guardar_ = ro?"":`<div style="display:flex;gap:10px;margin-top:12px"><button class="btn ghost" data-addresp style="padding:5px 10px">${ICON.plus} Añadir responsable</button><div style="flex:1"></div><button class="btn primary" data-saveequipo>Guardar</button></div>`;
+  return `<div class="wrap">
+    <div class="pagehead"><div><p class="eyebrow">Organización</p><h1>Equipo</h1>
+      <p class="sub">Quién responde de cada máquina y quién va a tener acceso</p></div></div>
+
+    <div class="note" style="margin-bottom:14px">${ICON.info}<div><b>Esta pantalla no crea cuentas.</b> Es la lista que rellena los desplegables de responsable y de firma, y el guion de a quién hay que dar de alta cuando llegue el momento. Las cuentas se crean en Supabase, una por una, y el perfil y los permisos de aquí son los que hay que ponerles allí.</div></div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="hd"><h2>Responsables de máquina</h2><span class="sub">${rs.length}</span></div>
+      <div class="bd">
+        <p class="sub" style="margin:0 0 12px">Puede ser una persona o un área. Es lo que sale en el desplegable «Responsable» de cada ficha.</p>
+        <div class="linelist">${rs.map((x,i)=>`
+          <div class="lineitem"><span class="n">${i+1}</span>
+            <input type="text" data-resp="${i}" value="${esc(x)}" style="flex:1" ${ro?"disabled":""}>
+            ${ro?"":`<button class="btn ghost" data-delresp="${i}" style="padding:2px 8px">✕</button>`}</div>`).join("")}</div>
+        ${rs.length?"":`<p class="sub">Todavía no hay ninguno.</p>`}
+        ${guardar_}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><h2>Personas con acceso previsto</h2><span class="sub">${ps.length}</span></div>
+      ${ps.length?`<div class="tablewrap"><table>
+        <thead><tr><th style="min-width:150px">Nombre</th><th style="min-width:140px">Puesto</th><th style="min-width:190px">Correo</th><th style="min-width:130px">Perfil</th><th class="num">Edita el plan</th><th class="num">Valida</th><th></th></tr></thead>
+        <tbody>${ps.map((x,i)=>`<tr>
+          <td><input type="text"  data-pe="${i}|n"    value="${esc(x.n||"")}"    style="width:100%" ${ro?"disabled":""}></td>
+          <td><input type="text"  data-pe="${i}|r"    value="${esc(x.r||"")}"    style="width:100%" ${ro?"disabled":""}></td>
+          <td><input type="email" data-pe="${i}|mail" value="${esc(x.mail||"")}" style="width:100%" ${ro?"disabled":""}></td>
+          <td><select data-pe="${i}|perfil" ${ro?"disabled":""}>${PERFILES_ACCESO.map(([v,l])=>`<option value="${v}" ${v===(x.perfil||"encargado")?"selected":""}>${l}</option>`).join("")}</select></td>
+          <td class="num"><input type="checkbox" data-pec="${i}|plan" ${x.plan?"checked":""} ${ro?"disabled":""}></td>
+          <td class="num"><input type="checkbox" data-pec="${i}|vb"   ${x.vb?"checked":""}   ${ro?"disabled":""}></td>
+          <td>${ro?"":`<button class="btn ghost" data-delpe="${i}" style="padding:2px 7px">✕</button>`}</td>
+        </tr>`).join("")}</tbody></table></div>`
+      :`<div class="emptystate"><h3>Todavía no hay nadie en la lista</h3><p>Añade a quien vaya a usar la plataforma con su correo y su perfil. Sirve de guion para las altas y para saber quién firma qué.</p></div>`}
+      ${ro?"":`<div class="bd" style="display:flex;gap:10px"><button class="btn ghost" data-addpe style="padding:5px 10px">${ICON.plus} Añadir persona</button><div style="flex:1"></div><button class="btn primary" data-saveequipo>Guardar</button></div>`}
+    </div>
+  </div>`;
+}
 
 /* ══════════════ VISTA · TAREAS ══════════════ */
 function viewTareas(){
@@ -1267,7 +1358,7 @@ function tabFicha(m){
           <select id="m_grupo" data-m="grupo" ${RO()?"disabled":""}>${(DB.grupos||[]).map(g=>`<option ${g===m.grupo?"selected":""}>${esc(g)}</option>`).join("")}</select></div></div>
         <div style="flex:1;min-width:190px">${f("ubic","Ubicación o línea")}</div>
         <div style="flex:1;min-width:190px"><div class="field"><label for="m_resp">Responsable</label>
-          <select id="m_resp" data-m="resp" ${RO()?"disabled":""}>${(DB.personas||[]).map(p=>`<option ${p.n===m.resp?"selected":""}>${esc(p.n)}</option>`).join("")}</select></div></div>
+          <select id="m_resp" data-m="resp" ${RO()?"disabled":""}>${optResp(m.resp)}</select></div></div>
       </div>
       <div class="rowsplit">
         <div style="flex:1;min-width:150px">${f("fab","Fabricante")}</div>
@@ -1281,7 +1372,30 @@ function tabFicha(m){
         <div style="flex:2;min-width:220px">${f("doc","Documento del plan interno","F1/P-07 Rev. 04")}</div>
       </div>
       ${RO()?"":`<div style="display:flex;gap:10px"><button class="btn ghost" data-delmach>Eliminar máquina</button><div style="flex:1"></div><button class="btn primary" data-savemach>Guardar ficha</button></div>`}
-    </div></div>`;
+    </div></div>
+    ${tarjetaDocs(m)}`;
+}
+
+function tarjetaDocs(m){
+  const ds = m.docs || [];
+  return `<div class="card" style="margin-top:14px">
+    <div class="hd"><h2>Manuales y documentación</h2><span class="sub">${ds.length}</span></div>
+    ${ds.length?`<div class="tablewrap"><table>
+      <thead><tr><th>Documento</th><th class="num">Tamaño</th><th>Subido</th><th style="width:170px"></th></tr></thead>
+      <tbody>${ds.map((d,i)=>`<tr>
+        <td><b>${esc(d.n)}</b></td>
+        <td class="num mono">${esc(pesoDoc(+d.kb||0))}</td>
+        <td class="sub">${esc(fmtFull(parseISO(d.fecha)))}</td>
+        <td><button class="btn ghost" data-verdoc="${i}" style="padding:3px 8px">Abrir</button>
+            ${RO()?"":`<button class="btn ghost" data-deldoc="${i}" style="padding:3px 8px">Quitar</button>`}</td>
+      </tr>`).join("")}</tbody></table></div>`
+    :`<div class="emptystate"><h3>Sin documentación cargada</h3><p>Sube aquí el manual del fabricante, los esquemas eléctricos o el despiece. Quien tenga una duda delante de la máquina lo abre desde la tablet sin buscar en ninguna carpeta.</p></div>`}
+    ${RO()?"":`<div class="bd" style="display:flex;gap:10px;align-items:center">
+      <input type="file" id="docfile" accept="application/pdf,.pdf" style="display:none">
+      <button class="btn" data-adddoc>${ICON.plus} Subir un PDF</button>
+      <span class="sub" style="font-size:12.5px">Solo PDF, hasta ${MAX_DOC_MB} MB. Hace falta cobertura para abrirlos.</span>
+    </div>`}
+  </div>`;
 }
 
 function tabReglas(m){
@@ -1291,7 +1405,12 @@ function tabReglas(m){
         <span class="txt"><b>Exige consignación eléctrica antes de intervenir.</b><br><span style="color:var(--ink-2)">El parte no se abre hasta que el mecánico lo confirma.</span></span></label>
       <label class="checkbig ${r.vb?"on":""}" style="margin-bottom:16px"><input type="checkbox" data-r="vb" ${r.vb?"checked":""} ${RO()?"disabled":""}>
         <span class="txt"><b>Exige visto bueno antes de volver a producción.</b><br><span style="color:var(--ink-2)">El parte queda pendiente hasta que lo firma el responsable.</span></span></label>
-      <div class="field"><label for="r_epi">EPI obligatorio</label><input type="text" id="r_epi" data-r="epi" value="${esc(r.epi||"")}" ${RO()?"disabled":""}></div>
+      <div class="field"><label for="r_epi">EPI para intervenir en la máquina</label>
+        <div class="help">Lo que se pone quien abre el parte. Sale en el paso de Seguridad, antes de tocar nada.</div>
+        <input type="text" id="r_epi" data-r="epi" value="${esc(r.epi||"")}" ${RO()?"disabled":""}></div>
+      <div class="field"><label for="r_epiop">EPI de uso normal (operario de producción)</label>
+        <div class="help">Lo que lleva quien trabaja con la máquina en marcha. Es informativo: no aparece en el parte de mantenimiento.</div>
+        <input type="text" id="r_epiop" data-r="epiOp" value="${esc(r.epiOp||"")}" placeholder="Si es el mismo, déjalo vacío" ${RO()?"disabled":""}></div>
       <div class="field"><label>Avisos que verá el mecánico al abrir cualquier parte</label>
         <div class="linelist" id="avisos">${(r.avisos||[]).map((a,i)=>`
           <div class="lineitem"><span class="n">${i+1}</span>
@@ -1335,17 +1454,17 @@ function tabRepuestos(m){
     <div class="card">
       <div class="hd"><h2>Repuestos y consumibles</h2><span class="sub">${ps.length}</span><div style="flex:1"></div>
         ${RO()?"":`<button class="btn" data-addpart>${ICON.plus} Añadir</button>`}
-        ${(RO()||!ps.length)?"":`<button class="btn primary" data-savepart>Guardar stock</button>`}</div>
+        ${(!EJEC()||!ps.length)?"":`<button class="btn primary" data-savepart>Guardar stock</button>`}</div>
       ${ps.length?`<div class="tablewrap"><table>
         <thead><tr><th style="width:60px">Nivel</th><th>Descripción</th><th class="num">Stock</th><th class="num">Mínimo</th><th>Proveedor</th><th class="num">Plazo</th><th>Estado</th><th style="width:40px"></th></tr></thead>
         <tbody>${ps.map((p,i)=>`<tr>
           <td><span class="pill ${p.ref==="P0"?"crit":p.ref==="P1"?"warn":"neut"}"><i></i>${esc(p.ref)}</span></td>
           <td><b>${esc(p.name)}</b>${p.nota?`<div class="sub" style="font-size:12.5px">${esc(p.nota)}</div>`:""}</td>
-          <td class="num">${RO()?p.stock:`<input type="number" data-pf="${i}|stock" value="${p.stock}" min="0" style="width:70px;text-align:right;padding:5px 7px">`}</td>
+          <td class="num">${EJEC()?`<input type="number" data-pf="${i}|stock" value="${p.stock}" min="0" style="width:70px;text-align:right;padding:5px 7px">`:p.stock}</td>
           <td class="num">${RO()?p.min:`<input type="number" data-pf="${i}|min" value="${p.min}" min="0" style="width:70px;text-align:right;padding:5px 7px">`}</td>
           <td class="sub">${esc(p.prov||"—")}</td><td class="num">${p.plazo||0} d</td>
           <td>${p.stock===0?'<span class="pill crit"><i></i>Sin stock</span>':p.stock<p.min?'<span class="pill warn"><i></i>Bajo mínimo</span>':'<span class="pill ok"><i></i>Correcto</span>'}</td>
-          <td>${RO()?"":`<button class="btn ghost" data-delpart="${i}" style="padding:2px 7px">✕</button>`}</td>
+          <td>${RO()?"":`<button class="btn ghost" data-editrep="${i}" style="padding:2px 8px">Editar</button>`}</td>
         </tr>`).join("")}</tbody></table></div>`
       :`<div class="emptystate"><h3>Sin repuestos asociados</h3><p>El plazo de entrega pesa tanto como el stock: una pieza crítica con seis semanas de plazo hay que tenerla en la estantería aunque se use una vez al año.</p></div>`}
     </div>`;
@@ -1528,7 +1647,7 @@ function viewAverias(){
       <div><p class="eyebrow">Correctivo</p><h1>Solicitudes de reparación</h1>
       <p class="sub">Mismos campos que el impreso en papel. La diferencia: las horas se acumulan solas por máquina.</p></div>
       <div class="spacer"></div>
-      ${RO()?"":`<button class="btn primary" data-act="averia">Registrar solicitud</button>`}
+      ${EJEC()?`<button class="btn primary" data-act="averia">Registrar solicitud</button>`:""}
     </div>
     <div class="kpis">
       <div class="kpi"><div class="k">Partes abiertos</div><div class="v">${abiertas.length}</div><div class="d">${esc(abiertas.map(a=>a.mid).join(", ")||"—")}</div></div>
@@ -1545,7 +1664,7 @@ function viewAverias(){
         <td class="sub">${esc(a.sol)}</td>
         <td class="num">${nfmt(a.paro,2)}</td><td class="num">${nfmt(a.rep,2)}</td>
         <td>${a.abierta?'<span class="pill crit"><i></i>Abierta</span>':'<span class="pill ok"><i></i>Cerrada</span>'}</td>
-        <td>${(RO()||!a.abierta)?"":`<button class="btn ghost" data-closeav="${esc(a.id)}" style="padding:3px 8px">Cerrar</button>`}</td>
+        <td>${(!EJEC()||!a.abierta)?"":`<button class="btn ghost" data-closeav="${esc(a.id)}" style="padding:3px 8px">Cerrar</button>`}</td>
       </tr>`).join("")}</tbody></table></div></div>`
     :`<div class="card"><div class="emptystate"><h3>Ninguna solicitud registrada</h3><p>Registrar las averías es lo que después dice qué máquina hay que reforzar en el preventivo.</p></div></div>`}
   </div>`;
@@ -1891,7 +2010,7 @@ function viewCuadro(){
 const FASES = ["Identificación","Criticidad","Reglas del equipo","Horas de trabajo","Resumen"];
 function altaInit(){
   state.alta = {step:0, d:{id:"", nombre:"", grupo:(DB.grupos||["Producción"])[0], ubic:"",
-    resp:((DB.personas||[])[0]||{}).n||"", fab:"", modelo:"", serie:"", anio:"", doc:"",
+    resp:(DB.responsables||[])[0]||"", fab:"", modelo:"", serie:"", anio:"", doc:"",
     q1:null,q2:null,q3:null,q4:null,q5:null,
     reglas:{loto:true, vb:true, epi:"Guantes anticorte, gafas y calzado de seguridad", avisos:[]},
     horas:{tiene:false, acum:0, semana:40, act:toISO(today()), gobierno:"Ambos — lo que ocurra antes"}}};
@@ -1924,7 +2043,7 @@ function viewAlta(){
           <select id="a_grupo" data-a="grupo">${(DB.grupos||[]).map(g=>`<option ${g===d.grupo?"selected":""}>${esc(g)}</option>`).join("")}</select></div></div>
         <div style="flex:1;min-width:190px">${A("ubic","Ubicación o línea")}</div>
         <div style="flex:1;min-width:190px"><div class="field"><label for="a_resp">Responsable del grupo</label>
-          <select id="a_resp" data-a="resp">${(DB.personas||[]).map(p=>`<option ${p.n===d.resp?"selected":""}>${esc(p.n)}</option>`).join("")}</select></div></div>
+          <select id="a_resp" data-a="resp">${optResp(d.resp)}</select></div></div>
       </div>
       <div class="rowsplit">
         <div style="flex:1;min-width:150px">${A("fab","Fabricante")}</div>
@@ -2085,21 +2204,27 @@ function sheetTarea(){
 
 /* ── Repuesto ── */
 function sheetRepuesto(){
-  return sheetShell("Añadir repuesto", `${esc(state.mid)} · almacén`, "", `
+  const m = byId(state.mid) || {};
+  const idx = state.modal.indexOf("rep:") === 0 ? +state.modal.slice(4) : -1;
+  const p = idx >= 0 ? ((m.repuestos||[])[idx] || null) : null;
+  const nuevo = !p;
+  const V = (k,d="") => esc(p ? (p[k]==null ? d : p[k]) : d);
+  const sel = (v) => (p ? p.ref : "C") === v ? "selected" : "";
+  return sheetShell(nuevo?"Añadir repuesto":"Editar repuesto", `${esc(state.mid)} · almacén`, "", `
     <div class="rowsplit">
       <div class="field" style="flex:1;min-width:130px"><label for="rref">Nivel</label>
-        <select id="rref"><option>P0</option><option>P1</option><option selected>C</option></select>
+        <select id="rref"><option ${sel("P0")}>P0</option><option ${sel("P1")}>P1</option><option ${sel("C")}>C</option></select>
         <div class="help" style="margin-top:6px">P0 bloquea, P1 estabiliza, C consumible.</div></div>
-      <div class="field" style="flex:2;min-width:220px"><label for="rname">Descripción</label><input type="text" id="rname" placeholder="Rodamiento 6204-2RS"></div>
+      <div class="field" style="flex:2;min-width:220px"><label for="rname">Descripción</label><input type="text" id="rname" value="${V("name")}" placeholder="Rodamiento 6204-2RS"></div>
     </div>
     <div class="rowsplit">
-      <div class="field" style="flex:1;min-width:110px"><label for="rstock">Stock</label><input type="number" id="rstock" value="0"></div>
-      <div class="field" style="flex:1;min-width:110px"><label for="rmin">Mínimo</label><input type="number" id="rmin" value="1"></div>
-      <div class="field" style="flex:1;min-width:140px"><label for="rplazo">Plazo (días)</label><input type="number" id="rplazo" value="7"></div>
-      <div class="field" style="flex:2;min-width:180px"><label for="rprov">Proveedor</label><input type="text" id="rprov"></div>
+      <div class="field" style="flex:1;min-width:110px"><label for="rstock">Stock</label><input type="number" id="rstock" value="${V("stock","0")}"></div>
+      <div class="field" style="flex:1;min-width:110px"><label for="rmin">Mínimo</label><input type="number" id="rmin" value="${V("min","1")}"></div>
+      <div class="field" style="flex:1;min-width:140px"><label for="rplazo">Plazo (días)</label><input type="number" id="rplazo" value="${V("plazo","7")}"></div>
+      <div class="field" style="flex:2;min-width:180px"><label for="rprov">Proveedor</label><input type="text" id="rprov" value="${V("prov")}"></div>
     </div>
-    <div class="field"><label for="rnota">Criterio de compra</label><input type="text" id="rnota" placeholder="Qué hay que confirmar antes de pedirlo"></div>
-  `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-dorep>Añadir</button>`);
+    <div class="field"><label for="rnota">Criterio de compra</label><input type="text" id="rnota" value="${V("nota")}" placeholder="Qué hay que confirmar antes de pedirlo"></div>
+  `, `${nuevo?`<button class="btn ghost" data-close>Cancelar</button>`:`<button class="btn ghost" data-delrepdef="${idx}">Eliminar</button>`}<div class="spacer"></div><button class="btn primary" data-dorep="${idx}">${nuevo?"Añadir":"Guardar cambios"}</button>`);
 }
 
 /* ── Solicitud de reparación ── */
@@ -2146,7 +2271,7 @@ function sheetVB(hid){
         <label class="checkbig" data-vbchk><input type="checkbox"><span class="txt">${c}</span></label>`).join("")}
     </div>
     <div class="field" style="margin-top:16px"><label for="vbq">Firma</label>
-      <select id="vbq">${(DB.personas||[]).map(p=>`<option>${esc(p.n)}</option>`).join("")}</select></div>
+      <select id="vbq">${(() => { const f=(DB.personas||[]).filter(p=>p.vb); return (f.length?f:(DB.personas||[])).map(p=>`<option>${esc(p.n)}</option>`).join(""); })()}</select></div>
   `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div><button class="btn primary" data-dovb="${esc(hid)}">Liberar máquina</button>`);
 }
 
@@ -2332,7 +2457,7 @@ function renderModal(){
   }
   if(state.modal==="posponer")   root.innerHTML = sheetPosponer();
   else if(state.modal==="averia")root.innerHTML = sheetAveria();
-  else if(state.modal==="rep")   root.innerHTML = sheetRepuesto();
+  else if(state.modal==="rep" || (state.modal && state.modal.indexOf("rep:")===0)) root.innerHTML = sheetRepuesto();
   else if(state.modal && state.modal.indexOf("vb:")===0) root.innerHTML = sheetVB(state.modal.slice(3));
   else if(state.modal==="pass") root.innerHTML = sheetPass();
   else if(state.td)              root.innerHTML = sheetTarea();
@@ -2421,12 +2546,22 @@ function bindModal(){
   }
 
   /* ---- repuesto ---- */
-  on("[data-dorep]","click", async ()=>{
+  on("[data-delrepdef]","click", async e=>{
+    const i = +e.currentTarget.dataset.delrepdef, m = byId(state.mid);
+    if(!m || !m.repuestos || !m.repuestos[i]) return;
+    if(!confirm("Se va a quitar «"+m.repuestos[i].name+"» de la lista de repuestos de esta máquina.\n\n¿Seguir?")) return;
+    m.repuestos.splice(i,1);
+    close(); render(); await guardar("Repuesto eliminado.");
+  });
+  on("[data-dorep]","click", async e=>{
     const g = id => { const n=q("#"+id); return n?n.value:""; };
     if(!g("rname")){ toast("Falta la descripción."); return; }
+    const i = +e.currentTarget.dataset.dorep;
     const m = byId(state.mid); m.repuestos = m.repuestos || [];
-    m.repuestos.push({ref:g("rref"), name:g("rname"), stock:+g("rstock")||0, min:+g("rmin")||0,
-      prov:g("rprov")||"—", plazo:+g("rplazo")||0, nota:g("rnota")||""});
+    const datos = {ref:g("rref"), name:g("rname"), stock:+g("rstock")||0, min:+g("rmin")||0,
+      prov:g("rprov")||"—", plazo:+g("rplazo")||0, nota:g("rnota")||""};
+    if(i >= 0 && m.repuestos[i]) m.repuestos[i] = Object.assign({}, m.repuestos[i], datos);
+    else m.repuestos.push(datos);
     close(); render(); await guardar("Repuesto añadido.");
   });
 
@@ -2533,17 +2668,65 @@ function bindView(){
       toast("Copia de seguridad descargada.");
     }catch(e){ toast("No se ha podido preparar la descarga."); }
   });
+  v.querySelectorAll("[data-resp]").forEach(n=>n.addEventListener("input", e=>{ DB.responsables[+e.target.dataset.resp] = e.target.value; }));
+  on("[data-delresp]", e=>{ DB.responsables.splice(+e.currentTarget.dataset.delresp,1); render(); });
+  on("[data-addresp]", ()=>{ DB.responsables.push(""); render(); setTimeout(()=>{ const ns=v.querySelectorAll("[data-resp]"); if(ns.length) ns[ns.length-1].focus(); },0); });
+  v.querySelectorAll("[data-pe]").forEach(n=>["input","change"].forEach(ev=>n.addEventListener(ev, e=>{
+    const [i,f] = e.target.dataset.pe.split("|"); DB.personas[+i][f] = e.target.value;
+  })));
+  v.querySelectorAll("[data-pec]").forEach(n=>n.addEventListener("change", e=>{
+    const [i,f] = e.target.dataset.pec.split("|"); DB.personas[+i][f] = e.target.checked;
+  }));
+  on("[data-delpe]", e=>{ DB.personas.splice(+e.currentTarget.dataset.delpe,1); render(); });
+  on("[data-addpe]", ()=>{ DB.personas.push({n:"", r:"", mail:"", perfil:"encargado", plan:false, vb:false}); render(); });
+  on("[data-saveequipo]", async ()=>{
+    DB.responsables = (DB.responsables||[]).map(x=>String(x||"").trim()).filter(Boolean);
+    DB.personas = (DB.personas||[]).filter(x=>String(x.n||"").trim());
+    render(); await guardar("Equipo actualizado.");
+  });
+  on("[data-adddoc]", ()=>{ const f=document.getElementById("docfile"); if(f) f.click(); });
+  const inpDoc = v.querySelector("#docfile");
+  if(inpDoc) inpDoc.addEventListener("change", async e=>{
+    const file = e.target.files && e.target.files[0]; if(!file) return;
+    e.target.value = "";
+    const m = byId(state.mid); if(!m) return;
+    if(!/pdf/i.test(file.type) && !/\.pdf$/i.test(file.name)){ toast("De momento solo PDF."); return; }
+    if(file.size > MAX_DOC_MB*1024*1024){ toast("El archivo pasa de "+MAX_DOC_MB+" MB. Divídelo o comprímelo."); return; }
+    toast("Subiendo «"+file.name+"»…");
+    const ruta = m.id+"/"+uid("doc")+".pdf";
+    const ok = await subirDoc(ruta, file);
+    if(!ok){ toast("No se ha podido subir. Comprueba la conexión y que el almacén «manuales» esté creado."); return; }
+    m.docs = m.docs || [];
+    m.docs.push({n:file.name.replace(/\.pdf$/i,""), ruta:ruta, kb:Math.round(file.size/1024), fecha:toISO(today())});
+    render(); await guardar("Documento añadido a la ficha.");
+  });
+  on("[data-verdoc]", async e=>{
+    const m = byId(state.mid), d = m && (m.docs||[])[+e.currentTarget.dataset.verdoc];
+    if(!d) return;
+    const w = window.open("", "_blank");          // se abre antes de firmar: si no, el navegador lo bloquea
+    const url = await firmar("manuales", d.ruta);
+    if(url && w) w.location = url;
+    else { if(w) w.close(); toast("No se ha podido abrir el documento."); }
+  });
+  on("[data-deldoc]", async e=>{
+    const m = byId(state.mid), i = +e.currentTarget.dataset.deldoc, d = m && (m.docs||[])[i];
+    if(!d) return;
+    if(!confirm("Se va a quitar «"+d.n+"» de la ficha y del almacén.\n\n¿Seguir?")) return;
+    await borrarDoc(d.ruta);
+    m.docs.splice(i,1); render(); await guardar("Documento quitado.");
+  });
   on("[data-nav]", e=>{ const t=e.currentTarget.dataset.nav; if(t==="alta") altaInit(); state.view=t; render(); });
   on("[data-mach]", e=>{ state.mid=e.currentTarget.dataset.mach; state.view="maquina"; state.tab="plan"; render(); });
   on("[data-tab]", e=>{ state.tab=e.currentTarget.dataset.tab; render(); });
   on("[data-open]", e=>{
-    if(RO()){ toast("Vista de solo lectura."); return; }
+    if(!EJEC()){ toast("Tu usuario solo puede consultar."); return; }
     const [mid,tid] = e.currentTarget.dataset.open.split("|"); abrirParte(mid,tid);
   });
-  on("[data-vb]", e=>{ state.modal="vb:"+e.currentTarget.dataset.vb; renderModal(); });
+  on("[data-vb]", e=>{ if(!PUEDE_VB){ toast("El visto bueno lo firma el responsable designado."); return; } state.modal="vb:"+e.currentTarget.dataset.vb; renderModal(); });
   on("[data-fotos]", e=>{ state.modal="fotos:"+e.currentTarget.dataset.fotos; renderModal(); });
   on('[data-act="averia"]', ()=>{ state.modal="averia"; renderModal(); });
   on("[data-addpart]", ()=>{ state.modal="rep"; renderModal(); });
+  on("[data-editrep]", e=>{ state.modal="rep:"+e.currentTarget.dataset.editrep; renderModal(); });
   v.querySelectorAll("[data-pf]").forEach(n=>n.addEventListener("change", e=>{
     const [i,f] = e.target.dataset.pf.split("|");
     const m = byId(state.mid); if(m && m.repuestos[+i]) m.repuestos[+i][f] = +e.target.value || 0;
@@ -2684,7 +2867,7 @@ function render(){
   renderNav();
   const views = {tareas:viewTareas, validaciones:viewValidaciones, maquinas:viewMaquinas,
                  maquina:viewMaquina, alta:viewAlta, repuestos:viewRepuestos,
-                 averias:viewAverias, cuadro:viewCuadro};
+                 averias:viewAverias, cuadro:viewCuadro, equipo:viewEquipo};
   if(state.view==="alta" && !state.alta) altaInit();
   $("#view").innerHTML = (views[state.view] || viewTareas)();
   bindView();
