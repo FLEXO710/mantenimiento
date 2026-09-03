@@ -932,6 +932,47 @@ async function borrarDoc(ruta){
 }
 const pesoDoc = (kb) => kb >= 1024 ? nfmt(kb/1024,1)+" MB" : nfmt(kb)+" KB";
 
+/* ══════════════ GASTOS ══════════════
+   Van en tablas propias, no dentro del estado: una factura es un
+   registro que se añade y no se vuelve a tocar. GASTOS_OK queda en
+   false si las tablas no están creadas todavía, y la pantalla lo
+   explica en vez de dar un error suelto. */
+let GASTOS = [], GASTOS_OK = false;
+
+async function cargarGastos(){
+  try{
+    const r = await rest("/rest/v1/gastos?select=*,gasto_lineas(*)&order=fecha.desc,id.desc", {headers:H()});
+    if(!r.ok){ GASTOS = []; GASTOS_OK = false; return false; }
+    GASTOS = (await r.json()).map(g => Object.assign({}, g, {lineas: g.gasto_lineas || []}));
+    GASTOS_OK = true; return true;
+  }catch(e){ GASTOS = []; GASTOS_OK = false; return false; }
+}
+async function altaGasto(cab, lineas){
+  const r = await rest("/rest/v1/rpc/nuevo_gasto", {method:"POST", headers:H(true),
+    body: JSON.stringify({cab: cab, lin: lineas})});
+  if(!r.ok){
+    const j = await r.json().catch(()=>({}));
+    throw new Error(j.message || j.hint || j.msg || "No se ha podido registrar el gasto ("+r.status+").");
+  }
+  return await r.json().catch(()=>null);
+}
+async function quitarGasto(id){
+  const r = await rest("/rest/v1/gastos?id=eq."+encodeURIComponent(id), {method:"DELETE", headers:H(true)});
+  return r.ok;
+}
+async function subirFactura(ruta, file){
+  try{
+    const r = await rest("/storage/v1/object/facturas/"+ruta, {method:"POST",
+      headers: Object.assign(H(false), {"Content-Type": file.type || "application/pdf", "x-upsert":"true"}),
+      body: file});
+    return r.ok ? ruta : null;
+  }catch(e){ return null; }
+}
+const TIPOS_GASTO = [["repuesto","Compra de repuesto"],["consumible","Consumible"],
+                     ["servicio","Servicio externo"],["otro","Otro"]];
+const tipoGasto = (t) => (TIPOS_GASTO.find(x=>x[0]===t)||["","—"])[1];
+const totalGasto = (g) => (g.lineas||[]).reduce((a,l)=>a+(+l.importe||0), 0) || (+g.total||0);
+
 /* Sube uno o varios PDF a la máquina abierta. Los que no valen se apartan
    y se dicen; los que valen se suben de uno en uno y se guarda una sola vez. */
 async function subirDocs(files){
@@ -1104,6 +1145,7 @@ async function boot(){
     PERFIL = await cargarPerfil();
     if(!PERFIL){ guardaSes(null); pantallaLogin("Tu usuario existe pero no tiene perfil. Pide al administrador que te dé de alta en la tabla de perfiles."); return; }
     await cargarEstado();
+    await cargarGastos();          // si las tablas aún no existen, se sigue sin ellas
   }catch(e){
     pantallaLogin(e.message || "No se ha podido conectar con el servidor.");
     return;
@@ -1124,11 +1166,11 @@ async function boot(){
 }
 
 /* ══════════════ ESTADO ══════════════ */
-const state = {role:"encargado", view:"tareas", mid:null, tab:"plan", modal:null, draft:null, alta:null, td:null, repAbierto:{}};
+const state = {role:"encargado", view:"tareas", mid:null, tab:"plan", modal:null, draft:null, alta:null, td:null, imp:null, gasto:null, repAbierto:{}};
 const NAV = {
   mecanico:  [["tareas","Mis tareas"],["maquinas","Máquinas"],["averias","Averías"]],
-  encargado: [["tareas","Tareas"],["validaciones","Validaciones"],["maquinas","Máquinas"],["repuestos","Repuestos"],["averias","Averías"],["cuadro","Cuadro de mando"],["equipo","Equipo"]],
-  direccion: [["cuadro","Cuadro de mando"],["maquinas","Máquinas"],["averias","Averías"],["repuestos","Repuestos"]],
+  encargado: [["tareas","Tareas"],["validaciones","Validaciones"],["maquinas","Máquinas"],["repuestos","Repuestos"],["averias","Averías"],["gastos","Gastos"],["cuadro","Cuadro de mando"],["equipo","Equipo"]],
+  direccion: [["cuadro","Cuadro de mando"],["maquinas","Máquinas"],["averias","Averías"],["repuestos","Repuestos"],["gastos","Gastos"]],
 };
 /* Solo lectura del PLAN. Ejecutar partes es otra cosa: mira EJEC(). */
 const RO   = () => state.role === "direccion" || !CAN || !PUEDE_PLAN;
@@ -1143,6 +1185,177 @@ function optResp(sel){
   if(sel && l.indexOf(sel) < 0) l.unshift(sel);
   if(!l.length) l.push("");
   return l.map(x=>`<option ${x===sel?"selected":""}>${esc(x)}</option>`).join("");
+}
+
+/* ══════════════ VISTA · GASTOS ══════════════ */
+function viewGastos(){
+  const kpi = (k,v,u,d,cls="") => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}${u?`<small> ${u}</small>`:""}</div>${d?`<div class="d ${cls}">${d}</div>`:""}</div>`;
+  const tot = gastoTotal();
+  const gen = gastoGeneral();
+  const d90 = desde(90);
+  const rec = GASTOS.filter(g => { const f = parseISO(g.fecha); return f && f >= d90; });
+  const totRec = rec.reduce((a,g)=>a+totalGasto(g), 0);
+  const nLin = GASTOS.reduce((a,g)=>a+(g.lineas||[]).length, 0);
+  const nombreDe = (mid) => { const m = byId(mid); return m ? m.nombre : mid; };
+
+  return `<div class="wrap">
+    <div class="pagehead">
+      <div><p class="eyebrow">Coste</p><h1>Gastos</h1>
+      <p class="sub">${GASTOS.length} ${GASTOS.length===1?"factura":"facturas"} · ${nLin} ${nLin===1?"línea":"líneas"} repartidas entre máquinas</p></div>
+      <div class="spacer"></div>
+      ${EJEC()&&GASTOS_OK?`<button class="btn primary" data-newgasto>${ICON.plus} Registrar gasto</button>`:""}
+    </div>
+
+    ${!GASTOS_OK ? `<div class="card"><div class="emptystate"><h3>Falta preparar la base de datos</h3>
+      <p>Los gastos viven en sus propias tablas y todavía no están creadas. Hay que ejecutar una vez el archivo <b>gastos.sql</b> en el editor SQL de Supabase. Hasta entonces esta pantalla no puede guardar nada.</p></div></div>`
+    : `
+    <div class="kpis">
+      ${kpi("Gasto registrado", tot?nfmt(tot,2):"—", tot?"€":"", tot?"Base imponible, sin IVA":"Todavía sin facturas")}
+      ${kpi("Últimos 90 días", totRec?nfmt(totRec,2):"—", totRec?"€":"", `${rec.length} ${rec.length===1?"factura":"facturas"}`)}
+      ${kpi("Repartido a máquinas", tot?nfmt(tot-gen,2):"—", tot?"€":"", tot?`${Math.round((tot-gen)/tot*100)} % del total`:"")}
+      ${kpi("Sin imputar", gen?nfmt(gen,2):"—", gen?"€":"", gen?"Gasto general del departamento":"Todo achacado a su máquina", gen?"down":"up")}
+    </div>
+
+    ${GASTOS.length ? `<div class="card" style="margin-top:14px">
+      <div class="hd"><h2>Facturas registradas</h2><div style="flex:1"></div><span class="sub">de la más reciente a la más antigua</span></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th style="width:96px">Fecha</th><th>Proveedor y concepto</th><th>Reparto</th><th class="num" style="width:104px">Importe</th><th style="width:150px"></th></tr></thead>
+        <tbody>${GASTOS.map(g=>`<tr>
+          <td class="mono">${esc(fmtFull(parseISO(g.fecha)))}</td>
+          <td><b>${esc(g.proveedor||"—")}</b>${g.factura?` <span class="code">${esc(g.factura)}</span>`:""}
+            <div class="sub" style="font-size:12.5px">${esc(tipoGasto(g.tipo))}${g.concepto?" · "+esc(g.concepto):""}</div></td>
+          <td>${(g.lineas||[]).length ? (g.lineas||[]).map(l=>`<div style="font-size:12.5px;margin-bottom:3px">
+                ${l.mid?`<span class="code">${esc(l.mid)}</span> ${esc(nombreDe(l.mid))}`:'<span class="sub">General</span>'}
+                ${l.rep?` · ${esc(l.rep)}${+l.cant?` ×${nfmt(l.cant)}`:""}`:""}
+                ${l.averia?` · <span class="pill crit"><i></i>avería ${esc(l.averia)}</span>`:""}
+                <span class="mono" style="color:var(--ink-2)"> ${nfmt(l.importe,2)} €</span></div>`).join("") : '<span class="sub">—</span>'}</td>
+          <td class="num mono" style="font-weight:600">${nfmt(totalGasto(g),2)} €</td>
+          <td>${g.doc?`<button class="btn ghost" data-verfac="${esc(g.doc)}" style="padding:3px 8px">Ver factura</button>`:""}
+              ${PUEDE_PLAN?`<button class="btn ghost" data-delgasto="${esc(g.id)}" style="padding:3px 8px">Quitar</button>`:""}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </div>` : `<div class="card" style="margin-top:14px"><div class="emptystate"><h3>Todavía no hay ninguna factura</h3>
+      <p>Cada compra de repuesto y cada reparación pagada fuera se registra aquí, con su PDF adjunto y repartida entre las máquinas a las que corresponde. Es lo que llena el bloque de Coste del cuadro de mando, y lo único que traduce el mantenimiento a euros delante de gerencia.</p>
+      ${EJEC()?`<button class="btn primary" data-newgasto>Registrar el primero</button>`:""}</div></div>`}
+    `}
+  </div>`;
+}
+
+/* ══════════════ VENTANA · NUEVO GASTO ══════════════ */
+function gastoInit(){
+  state.gasto = {fecha: toISO(today()), tipo:"repuesto", proveedor:"", factura:"", concepto:"",
+                 file:null, lineas:[{mid:"", rep:"", cant:"", importe:"", averia:"", nota:""}]};
+}
+function sheetGasto(){
+  const g = state.gasto;
+  const total = (g.lineas||[]).reduce((a,l)=>a+(+l.importe||0), 0);
+  const F = (k,l,ph="",tipo="text") => `<div class="field"><label for="g_${k}">${l}</label><input type="${tipo}" id="g_${k}" data-g="${k}" value="${esc(g[k]||"")}" placeholder="${ph}"></div>`;
+
+  const linea = (l,i) => {
+    const m = byId(l.mid);
+    const reps = m ? (m.repuestos||[]) : [];
+    const avs  = DB.averias.filter(a=>a.mid===l.mid && a.abierta);
+    return `<div class="card" style="margin-bottom:10px;background:var(--surface-2)"><div class="bd" style="padding:14px">
+      <div class="rowsplit">
+        <div class="field" style="flex:2;min-width:200px;margin-bottom:10px"><label for="gl${i}m">Máquina</label>
+          <select id="gl${i}m" data-gl="${i}|mid">
+            <option value="">— Gasto general, sin máquina —</option>
+            ${DB.maquinas.map(x=>`<option value="${esc(x.id)}" ${x.id===l.mid?"selected":""}>${esc(x.id)} · ${esc(x.nombre)}</option>`).join("")}
+          </select></div>
+        <div class="field" style="flex:1;min-width:120px;margin-bottom:10px"><label for="gl${i}i">Importe (€)</label>
+          <input type="number" id="gl${i}i" data-gl="${i}|importe" value="${esc(l.importe)}" step="0.01" min="0" placeholder="0,00"></div>
+      </div>
+      ${!m ? "" : `<div class="rowsplit">
+        <div class="field" style="flex:2;min-width:200px;margin-bottom:10px"><label for="gl${i}r">Repuesto al que suma stock</label>
+          <select id="gl${i}r" data-gl="${i}|rep">
+            <option value="">— No toca el inventario —</option>
+            ${reps.map(pz=>`<option ${pz.name===l.rep?"selected":""}>${esc(pz.name)}</option>`).join("")}
+          </select>
+          ${reps.length?"":`<div class="help" style="margin-top:6px">Esta máquina no tiene repuestos dados de alta.</div>`}</div>
+        <div class="field" style="flex:1;min-width:110px;margin-bottom:10px"><label for="gl${i}c">Unidades</label>
+          <input type="number" id="gl${i}c" data-gl="${i}|cant" value="${esc(l.cant)}" step="1" min="0" placeholder="0" ${l.rep?"":"disabled"}></div>
+        ${avs.length?`<div class="field" style="flex:1;min-width:170px;margin-bottom:10px"><label for="gl${i}a">¿Viene de una avería?</label>
+          <select id="gl${i}a" data-gl="${i}|averia"><option value="">— No —</option>
+            ${avs.map(a=>`<option value="${esc(a.id)}" ${a.id===l.averia?"selected":""}>${esc(a.id)}</option>`).join("")}</select></div>`:""}
+      </div>`}
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="text" data-gl="${i}|nota" value="${esc(l.nota)}" placeholder="Detalle de esta línea (opcional)" style="flex:1">
+        ${(g.lineas.length>1)?`<button class="btn ghost" data-delline="${i}" style="padding:4px 10px">Quitar línea</button>`:""}
+      </div>
+    </div></div>`;
+  };
+
+  return sheetShell("Registrar un gasto", "Coste · factura de compra o servicio", "", `
+    <div class="rowsplit">
+      <div style="flex:1;min-width:140px">${F("fecha","Fecha de la factura","","date")}</div>
+      <div style="flex:1;min-width:170px"><div class="field"><label for="g_tipo">Tipo</label>
+        <select id="g_tipo" data-g="tipo">${TIPOS_GASTO.map(([v,l])=>`<option value="${v}" ${v===g.tipo?"selected":""}>${l}</option>`).join("")}</select></div></div>
+      <div style="flex:1;min-width:150px">${F("factura","Nº de factura","2026/1234")}</div>
+    </div>
+    <div class="rowsplit">
+      <div style="flex:1;min-width:180px">${F("proveedor","Proveedor","SILMISA")}</div>
+      <div style="flex:2;min-width:220px">${F("concepto","Concepto","Qué se ha comprado o pagado")}</div>
+    </div>
+
+    <p class="eyebrow" style="margin:18px 0 8px">Reparto entre máquinas</p>
+    <p class="sub" style="margin:0 0 12px;font-size:12.5px">Una línea por cada cosa de la factura. Si los rodamientos son para la Play 1 y el aceite para el Troquel, son dos líneas: así el coste por máquina es real y no una estimación.</p>
+    ${g.lineas.map(linea).join("")}
+    <button class="btn ghost" data-addline style="padding:6px 12px">${ICON.plus} Añadir línea</button>
+
+    <p class="eyebrow" style="margin:20px 0 8px">Factura escaneada</p>
+    <input type="file" id="facfile" accept="application/pdf,.pdf,image/jpeg,image/png" style="display:none">
+    <div class="dropzone" id="dropfac" role="button" tabindex="0" aria-label="Adjuntar la factura">
+      ${ICON.plus}
+      <div><b>${g.file ? esc(g.file.name) : "Arrastra aquí la factura"}</b>
+        <span>${g.file ? "Pulsa para cambiarla" : "PDF o foto del papel, hasta 20 MB. Opcional, pero es la prueba del gasto."}</span></div>
+    </div>
+  `, `<button class="btn ghost" data-close>Cancelar</button>
+      <div class="spacer"></div>
+      <span class="mono" style="margin-right:14px;font-size:14px">Total <b id="gtot">${nfmt(total,2)} €</b></span>
+      <button class="btn primary" data-dogasto>Registrar</button>`);
+}
+
+/* ══════════════ ALTA MASIVA DESDE ARCHIVO ══════════════ */
+/* Rellena lo que falte para que una máquina traída de fuera se comporte
+   igual que una dada de alta a mano. */
+function normalizaMaquina(x){
+  const r = x.reglas || {};
+  const h = x.horas || {};
+  return {
+    id: String(x.id||"").trim(), nombre: String(x.nombre||"").trim(),
+    grupo: x.grupo || (DB.grupos||["Producción"])[0], ubic: x.ubic || "", resp: x.resp || "",
+    fab: x.fab || "", modelo: x.modelo || "", serie: x.serie || "", anio: x.anio || "",
+    crit: ["A","B","C"].indexOf(x.crit) > -1 ? x.crit : "C", doc: x.doc || "",
+    docs: Array.isArray(x.docs) ? x.docs : [],
+    reglas: {loto: r.loto !== false, vb: !!r.vb, epi: r.epi || "", epiOp: r.epiOp || "",
+             avisos: Array.isArray(r.avisos) ? r.avisos : []},
+    horas: {tiene: !!h.tiene, acum: +h.acum || 0, semana: +h.semana || 0,
+            act: h.act || "", gobierno: h.gobierno || "Solo calendario"},
+    tareas: Array.isArray(x.tareas) ? x.tareas : [],
+    repuestos: (Array.isArray(x.repuestos) ? x.repuestos : []).map(p => ({
+      ref: ["P0","P1","C"].indexOf(p.ref) > -1 ? p.ref : "C",
+      name: String(p.name||"").trim(), stock: +p.stock || 0, min: +p.min || 0,
+      prov: p.prov || "—", plazo: +p.plazo || 0, nota: p.nota || ""})),
+    lubri: Array.isArray(x.lubri) ? x.lubri : [],
+    acciones: Array.isArray(x.acciones) ? x.acciones : [],
+    liberacion: Array.isArray(x.liberacion) ? x.liberacion : []
+  };
+}
+
+function sheetImportar(){
+  const im = state.imp || {};
+  const n = im.nuevas ? im.nuevas.length : 0, r = im.repes ? im.repes.length : 0;
+  const lista = (im.nuevas||[]).slice(0,8).map(m=>`<div><span>${esc(m.id)}</span><span>${esc(m.nombre)} · ${(m.repuestos||[]).length} repuestos</span></div>`).join("");
+  return sheetShell("Importar máquinas", esc(im.fichero||""), "", `
+    <div class="summary" style="margin-bottom:16px">
+      <div><span>Máquinas en el archivo</span><span class="mono">${n + r}</span></div>
+      <div><span>Se van a dar de alta</span><span class="mono"><b>${n}</b></span></div>
+      <div><span>Repuestos que traen</span><span class="mono">${(im.nuevas||[]).reduce((a,m)=>a+(m.repuestos||[]).length,0)}</span></div>
+      ${r?`<div><span>Ya existen y se dejan como están</span><span class="mono">${r}</span></div>`:""}
+    </div>
+    ${r?`<div class="note warn" style="margin-bottom:16px">${ICON.warn}<div>${r===1?"Un código ya existe":"Hay "+r+" códigos que ya existen"} (${esc((im.repes||[]).join(", "))}). No se toca nada de esas máquinas: lo que ya tienes cargado manda.</div></div>`:""}
+    ${n?`<div class="summary">${lista}${n>8?`<div><span></span><span>…y ${n-8} más</span></div>`:""}</div>`:`<div class="note">${ICON.info}<div>No hay nada nuevo que dar de alta.</div></div>`}
+  `, `<button class="btn ghost" data-close>Cancelar</button><div class="spacer"></div>${n?`<button class="btn primary" data-doimport>Dar de alta ${n} ${n===1?"máquina":"máquinas"}</button>`:""}`);
 }
 
 /* ══════════════ VISTA · EQUIPO ══════════════ */
@@ -1293,7 +1506,9 @@ function viewMaquinas(){
       <p class="sub">${DB.maquinas.length} ${DB.maquinas.length===1?"equipo":"equipos"} · ${DB.maquinas.reduce((s,m)=>s+(m.tareas||[]).length,0)} tareas de mantenimiento definidas</p></div>
       <div class="spacer"></div>
       <button class="btn" data-export title="Descargar una copia de seguridad de todo el plan">Exportar copia</button>
-      ${RO()?"":`<button class="btn primary" data-nav="alta">${ICON.plus} Dar de alta una máquina</button>`}
+      ${RO()?"":`<input type="file" id="impfile" accept="application/json,.json" style="display:none">
+      <button class="btn" data-import title="Dar de alta muchas máquinas de golpe desde un archivo">Importar máquinas</button>
+      <button class="btn primary" data-nav="alta">${ICON.plus} Dar de alta una máquina</button>`}
     </div>
     ${DB.maquinas.length ? `<div class="machgrid">
       ${DB.maquinas.map(m=>{
@@ -1531,6 +1746,30 @@ function tabHist(m){
         <td>${(h.fotos&&(h.fotos.antes||h.fotos.despues))?`<button class="btn ghost" data-fotos="${esc(h.id)}" style="padding:3px 8px">Ver fotos</button>`:'<span class="sub" style="font-size:12px">—</span>'}</td>
       </tr>`).join("")}</tbody></table></div>`
     :`<div class="emptystate"><h3>Todavía no hay partes cerrados</h3><p>Cada parte que cierre el mecánico queda aquí con su fecha, su firma, el tiempo del cronómetro y las respuestas de la lista de comprobación. Es lo que se enseña en una auditoría.</p></div>`}
+  </div>
+  ${tarjetaGastos(m)}`;
+}
+
+/* Lo gastado en esta máquina, sacado de las líneas de factura. */
+function tarjetaGastos(m){
+  const filas = [];
+  GASTOS.forEach(g => (g.lineas||[]).forEach(l => { if(l.mid === m.id) filas.push({g, l}); }));
+  const tot = filas.reduce((a,x)=>a+(+x.l.importe||0), 0);
+  return `<div class="card" style="margin-top:14px">
+    <div class="hd"><h2>Gasto en esta máquina</h2><div style="flex:1"></div>
+      ${tot?`<span class="mono" style="font-weight:600">${nfmt(tot,2)} €</span>`:`<span class="sub">—</span>`}</div>
+    ${filas.length?`<div class="tablewrap"><table>
+      <thead><tr><th style="width:96px">Fecha</th><th>Proveedor</th><th>Concepto</th><th class="num">Importe</th><th></th></tr></thead>
+      <tbody>${filas.map(({g,l})=>`<tr>
+        <td class="mono">${esc(fmtFull(parseISO(g.fecha)))}</td>
+        <td>${esc(g.proveedor||"—")}${g.factura?`<div class="sub" style="font-size:12px">${esc(g.factura)}</div>`:""}</td>
+        <td>${esc(l.rep || g.concepto || tipoGasto(g.tipo))}${+l.cant?` <span class="mono sub">×${nfmt(l.cant)}</span>`:""}
+            ${l.averia?`<div class="sub" style="font-size:12px">Avería ${esc(l.averia)}</div>`:""}
+            ${l.nota?`<div class="sub" style="font-size:12px">${esc(l.nota)}</div>`:""}</td>
+        <td class="num mono">${nfmt(l.importe,2)} €</td>
+        <td>${g.doc?`<button class="btn ghost" data-verfac="${esc(g.doc)}" style="padding:3px 8px">Factura</button>`:""}</td>
+      </tr>`).join("")}</tbody></table></div>`
+    :`<div class="emptystate"><h3>Sin gasto registrado</h3><p>${GASTOS_OK?"Cuando registres una factura y le pongas esta máquina en el reparto, aparecerá aquí y sumará en el cuadro de mando.":"Los gastos necesitan que se ejecute una vez el archivo gastos.sql en Supabase."}</p></div>`}
   </div>`;
 }
 
@@ -1748,13 +1987,28 @@ function mtbf(dias){
 }
 function mttr(){ const n = DB.averias.length; return n ? DB.averias.reduce((s,a)=>s+(+a.rep||0),0)/n : null; }
 
+/* Gasto real facturado, por máquina. La clave "" son los gastos
+   generales, los que no se pueden achacar a una sola. */
+function gastoPorMaquina(){
+  const r = {};
+  GASTOS.forEach(g => (g.lineas||[]).forEach(l => {
+    const k = l.mid || "";
+    r[k] = (r[k] || 0) + (+l.importe || 0);
+  }));
+  return r;
+}
+const gastoTotal   = () => GASTOS.reduce((s,g)=>s+totalGasto(g), 0);
+const gastoGeneral = () => gastoPorMaquina()[""] || 0;
+
 function costePorMaquina(){
   const a = ajustes(), th = +a.tarifaHora||0, cp = +a.costeParoHora||0;
+  const mat = gastoPorMaquina();
   return DB.maquinas.map(m => {
     const prev = DB.historial.filter(h=>h.mid===m.id).reduce((s,h)=>s+(+h.min||0),0)/60*th;
     const av   = DB.averias.filter(x=>x.mid===m.id);
     const corr = av.reduce((s,x)=>s+((+x.rep||0)*th + (+x.paro||0)*cp), 0);
-    return {m, prev, corr, tot:prev+corr, nAv:av.length};
+    const fac  = mat[m.id] || 0;
+    return {m, prev, corr, fac, tot:prev+corr+fac, nAv:av.length};
   }).filter(x=>x.tot>0).sort((x,y)=>y.tot-x.tot);
 }
 function cumplPorMaquina(){
@@ -1849,6 +2103,7 @@ function viewCuadro(){
   const paroTot = DB.averias.reduce((s,x)=>s+(+x.paro||0),0);
   const costeTot = costes.reduce((s,x)=>s+x.tot,0);
   const corrTot = costes.reduce((s,x)=>s+x.corr,0);
+  const facTot  = gastoTotal();
   const pctCorr = costeTot ? Math.round(corrTot/costeTot*100) : null;
   const disp = disponibilidad(90), mtb = mtbf(90), mtr = mttr();
   const carga = DB.maquinas.reduce((s,m)=>s+cargaSemanal(m),0);
@@ -1891,10 +2146,10 @@ function viewCuadro(){
 
     <p class="eyebrow" style="margin:22px 0 8px">Coste</p>
     <div class="kpis">
-      ${kpi("Coste de mantenimiento", costeTot?nfmt(costeTot):"—", costeTot?"€":"", costeTot?"Preventivo + correctivo":"Falta la tarifa por hora")}
+      ${kpi("Coste de mantenimiento", costeTot?nfmt(costeTot):"—", costeTot?"€":"", costeTot?"Mano de obra + facturas":"Faltan las tarifas y las facturas")}
+      ${kpi("Facturado", facTot?nfmt(facTot,2):"—", facTot?"€":"", facTot?`${GASTOS.length} ${GASTOS.length===1?"factura":"facturas"} · repuestos y servicios`:"Sin facturas registradas")}
       ${kpi("Reparto correctivo", pctCorr===null?"—":pctCorr, pctCorr===null?"":"%", pctCorr===null?"Sin datos de coste":"Del gasto total", pctCorr!==null&&pctCorr>50?"down":"up")}
-      ${kpi("Coste del preventivo", costeTot?nfmt(costeTot-corrTot):"—", costeTot?"€":"", `${nfmt(horasPrev,1)} h dedicadas`)}
-      ${kpi("Coste del correctivo", costeTot?nfmt(corrTot):"—", costeTot?"€":"", "Reparación + línea parada", corrTot?"down":"")}
+      ${kpi("Mano de obra preventiva", costeTot?nfmt(costeTot-corrTot-facTot+gastoGeneral()):"—", costeTot?"€":"", `${nfmt(horasPrev,1)} h dedicadas`)}
     </div>
 
     <p class="eyebrow" style="margin:22px 0 8px">Instalación</p>
@@ -1939,7 +2194,7 @@ function viewCuadro(){
     <div class="card" style="margin-top:14px">
       <div class="hd"><h2>Coste de mantenimiento por máquina</h2><div style="flex:1"></div><span class="sub">acumulado</span></div>
       ${costes.length ? `<div class="bd">
-        <div class="legend"><span><i style="background:var(--s1)"></i>Preventivo</span><span><i style="background:var(--s2)"></i>Correctivo, incluido el coste del paro</span></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Preventivo</span><span><i style="background:var(--s2)"></i>Correctivo, incluido el coste del paro</span><span><i style="background:var(--ink-3)"></i>Facturas de repuestos y servicios</span></div>
         ${costes.map(c=>{ const max = costes[0].tot || 1;
           return `<div style="margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px">
@@ -1949,10 +2204,12 @@ function viewCuadro(){
               <div style="width:${(c.prev/max*100).toFixed(1)}%;background:var(--s1)" title="Preventivo ${nfmt(c.prev)} €"></div>
               <div style="width:2px;background:var(--surface)"></div>
               <div style="width:${(c.corr/max*100).toFixed(1)}%;background:var(--s2)" title="Correctivo ${nfmt(c.corr)} €"></div>
+              <div style="width:2px;background:var(--surface)"></div>
+              <div style="width:${(c.fac/max*100).toFixed(1)}%;background:var(--ink-3)" title="Facturado ${nfmt(c.fac,2)} €"></div>
             </div></div>`;}).join("")}
         ${pctCorr>50?`<div class="note" style="margin-top:14px">${ICON.info}<div>El <b>${pctCorr} %</b> del gasto se va en correctivo. Cuando una máquina se lleva más en averías que en prevención, o se refuerza su plan o se plantea sustituirla.</div></div>`:""}
       </div>`
-      : panelVacio("Falta decir cuánto cuesta una hora", "Sin la tarifa de mano de obra y el coste de una hora de máquina parada no se puede poner precio a nada. Están al final de esta pantalla.")}
+      : panelVacio("Todavía no hay nada que costear", "Con las tarifas de mano de obra (al final de esta pantalla) se valora el tiempo de los partes y las averías. Con las facturas de la pantalla de Gastos se ve el dinero realmente pagado. Cualquiera de las dos cosas llena este panel.")}
     </div>
 
     <div class="grid2" style="margin-top:14px">
@@ -2505,6 +2762,8 @@ function renderModal(){
   else if(state.modal==="rep" || (state.modal && state.modal.indexOf("rep:")===0)) root.innerHTML = sheetRepuesto();
   else if(state.modal && state.modal.indexOf("vb:")===0) root.innerHTML = sheetVB(state.modal.slice(3));
   else if(state.modal==="pass") root.innerHTML = sheetPass();
+  else if(state.modal==="importar") root.innerHTML = sheetImportar();
+  else if(state.modal==="gasto") root.innerHTML = sheetGasto();
   else if(state.td)              root.innerHTML = sheetTarea();
   else if(state.draft)           root.innerHTML = sheetParte();
   else { root.innerHTML=""; return; }
@@ -2515,7 +2774,7 @@ function renderModal(){
 function bindModal(){
   const root = $("#modalRoot"), q = s => root.querySelector(s);
   const on = (s,ev,fn) => root.querySelectorAll(s).forEach(n=>n.addEventListener(ev,fn));
-  const close = () => { stopChrono(); state.modal=null; state.draft=null; state.td=null; renderModal(); };
+  const close = () => { stopChrono(); state.modal=null; state.draft=null; state.td=null; state.imp=null; state.gasto=null; renderModal(); };
   const hayBorrador = () => {
     const t = state.td;
     if(t) return !!(String(t.nombre||"").trim() || String(t.desc||"").trim() || (t.checks||[]).some(c=>String(c).trim()));
@@ -2542,6 +2801,106 @@ function bindModal(){
     scrim.addEventListener("click", e => { if(e.target === scrim) e.stopPropagation(); });
   }
   document.onkeydown = e => { if(e.key==="Escape") intentarCerrar(); };
+
+  /* ---- registrar un gasto ---- */
+  if(state.modal === "gasto"){
+    const g = state.gasto;
+    on("[data-g]","input",  e=>{ g[e.target.dataset.g] = e.target.value; });
+    on("[data-g]","change", e=>{ g[e.target.dataset.g] = e.target.value; });
+    const pintaTotal = () => {
+      const t = q("#gtot");
+      if(t) t.textContent = nfmt(g.lineas.reduce((a,l)=>a+(+l.importe||0), 0), 2) + " €";
+    };
+    on("[data-gl]","input", e=>{
+      const [i,f] = e.target.dataset.gl.split("|"); g.lineas[+i][f] = e.target.value;
+      if(f === "importe") pintaTotal();
+    });
+    on("[data-gl]","change", e=>{
+      const [i,f] = e.target.dataset.gl.split("|"); g.lineas[+i][f] = e.target.value;
+      if(f === "mid"){ g.lineas[+i].rep = ""; g.lineas[+i].cant = ""; g.lineas[+i].averia = ""; renderModal(); }
+      else if(f === "rep") renderModal();   // habilita o bloquea las unidades
+      else if(f === "importe") pintaTotal();
+    });
+    on("[data-addline]","click", ()=>{
+      g.lineas.push({mid:"", rep:"", cant:"", importe:"", averia:"", nota:""}); renderModal();
+    });
+    on("[data-delline]","click", e=>{ g.lineas.splice(+e.currentTarget.dataset.delline,1); renderModal(); });
+
+    const inpFac = q("#facfile"), zonaFac = q("#dropfac");
+    const cogeFactura = (f) => {
+      if(!f) return;
+      if(f.size > 20*1024*1024){ toast("La factura pasa de 20 MB."); return; }
+      g.file = f; renderModal();
+    };
+    if(inpFac) inpFac.addEventListener("change", e=>{ const f = e.target.files && e.target.files[0]; e.target.value=""; cogeFactura(f); });
+    if(zonaFac){
+      zonaFac.addEventListener("click", ()=>{ if(inpFac) inpFac.click(); });
+      zonaFac.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); if(inpFac) inpFac.click(); } });
+      ["dragenter","dragover"].forEach(ev=>zonaFac.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); zonaFac.classList.add("over"); }));
+      ["dragleave","dragend"].forEach(ev=>zonaFac.addEventListener(ev, e=>{
+        e.preventDefault(); if(ev==="dragleave" && zonaFac.contains(e.relatedTarget)) return; zonaFac.classList.remove("over"); }));
+      zonaFac.addEventListener("drop", e=>{
+        e.preventDefault(); e.stopPropagation(); zonaFac.classList.remove("over");
+        cogeFactura(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+      });
+    }
+
+    on("[data-dogasto]","click", async e=>{
+      const total = g.lineas.reduce((a,l)=>a+(+l.importe||0), 0);
+      if(!String(g.proveedor||"").trim()){ toast("Falta el proveedor."); return; }
+      if(!(total > 0)){ toast("Ninguna línea tiene importe."); return; }
+      const b = e.currentTarget; b.disabled = true;
+
+      let ruta = "";
+      if(g.file){
+        b.textContent = "Subiendo la factura…";
+        const ext = /\.pdf$/i.test(g.file.name) ? ".pdf" : (/png$/i.test(g.file.type) ? ".png" : ".jpg");
+        const r = await subirFactura(uid("fac") + ext, g.file);
+        if(!r){ b.disabled=false; b.textContent="Registrar"; toast("No se ha podido subir la factura. Comprueba la conexión y que el almacén «facturas» esté creado."); return; }
+        ruta = r;
+      }
+
+      b.textContent = "Registrando…";
+      const lineas = g.lineas.filter(l => (+l.importe||0) > 0 || String(l.rep||"").trim()).map(l => ({
+        mid: l.mid || "", rep: l.rep || "", cant: +l.cant || 0,
+        importe: +l.importe || 0, averia: l.averia || "", nota: String(l.nota||"").trim()
+      }));
+      try{
+        await altaGasto({fecha: g.fecha, tipo: g.tipo, proveedor: String(g.proveedor).trim(),
+                         factura: String(g.factura||"").trim(), concepto: String(g.concepto||"").trim(),
+                         doc: ruta, total: total, creado_por: (PERFIL && PERFIL.nombre) || ""}, lineas);
+      }catch(err){
+        b.disabled=false; b.textContent="Registrar"; toast(err.message); return;
+      }
+
+      /* Sumar al stock lo que se haya comprado. Va aparte porque el
+         inventario vive en el estado, no en la tabla de gastos. */
+      let sumadas = 0;
+      lineas.forEach(l => {
+        if(!l.mid || !l.rep || !(l.cant > 0)) return;
+        const m = byId(l.mid); if(!m) return;
+        const pz = (m.repuestos||[]).find(x => x.name === l.rep); if(!pz) return;
+        pz.stock = (+pz.stock||0) + l.cant; sumadas++;
+      });
+
+      await cargarGastos();
+      close(); render();
+      if(sumadas) await guardar("Gasto registrado. Stock actualizado en " + sumadas + " " + (sumadas===1?"repuesto.":"repuestos."));
+      else toast("Gasto registrado.");
+    });
+  }
+
+  /* ---- alta masiva ---- */
+  if(state.modal === "importar"){
+    on("[data-doimport]","click", async e=>{
+      const im = state.imp; if(!im || !im.nuevas.length) return;
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Dando de alta…";
+      const cuantas = im.nuevas.length;
+      im.nuevas.forEach(m => DB.maquinas.push(m));
+      close(); render();
+      await guardar(cuantas + (cuantas===1 ? " máquina dada de alta." : " máquinas dadas de alta."));
+    });
+  }
 
   /* ---- cambiar mi contraseña ---- */
   if(state.modal === "pass"){
@@ -2772,6 +3131,42 @@ function bindView(){
     await borrarDoc(d.ruta);
     m.docs.splice(i,1); render(); await guardar("Documento quitado.");
   });
+  on("[data-newgasto]", ()=>{ gastoInit(); state.modal="gasto"; renderModal(); });
+  on("[data-verfac]", async e=>{
+    const w = window.open("", "_blank");
+    const url = await firmar("facturas", e.currentTarget.dataset.verfac);
+    if(url && w) w.location = url;
+    else { if(w) w.close(); toast("No se ha podido abrir la factura."); }
+  });
+  on("[data-delgasto]", async e=>{
+    const id = e.currentTarget.dataset.delgasto;
+    if(!confirm("Se va a quitar esta factura y su reparto.\n\nEl stock que sumó NO se descuenta: si hace falta, corrígelo a mano.\n\n¿Seguir?")) return;
+    if(await quitarGasto(id)){ await cargarGastos(); render(); toast("Factura quitada."); }
+    else toast("No se ha podido quitar. Solo puede hacerlo quien maneja el plan.");
+  });
+  on("[data-import]", ()=>{ const f=v.querySelector("#impfile"); if(f) f.click(); });
+  const impFile = v.querySelector("#impfile");
+  if(impFile) impFile.addEventListener("change", async e=>{
+    const file = e.target.files && e.target.files[0]; e.target.value = "";
+    if(!file) return;
+    let datos;
+    try{ datos = JSON.parse(await file.text()); }
+    catch(err){ toast("Ese archivo no es un JSON válido."); return; }
+    /* Vale tanto una lista de máquinas como una copia de seguridad entera. */
+    const lista = Array.isArray(datos) ? datos : (Array.isArray(datos.maquinas) ? datos.maquinas : null);
+    if(!lista){ toast("No encuentro ninguna lista de máquinas dentro del archivo."); return; }
+    const buenas = lista.filter(x => x && String(x.id||"").trim() && String(x.nombre||"").trim());
+    if(!buenas.length){ toast("Las máquinas del archivo no traen código y nombre."); return; }
+    const hay = {}; DB.maquinas.forEach(m => hay[m.id] = true);
+    const nuevas = [], repes = [], vistos = {};
+    buenas.forEach(x => {
+      const m = normalizaMaquina(x);
+      if(hay[m.id] || vistos[m.id]) repes.push(m.id);
+      else { vistos[m.id] = true; nuevas.push(m); }
+    });
+    state.imp = {fichero: file.name, nuevas: nuevas, repes: repes};
+    state.modal = "importar"; renderModal();
+  });
   on("[data-nav]", e=>{ const t=e.currentTarget.dataset.nav; if(t==="alta") altaInit(); state.view=t; render(); });
   on("[data-mach]", e=>{ state.mid=e.currentTarget.dataset.mach; state.view="maquina"; state.tab="plan"; render(); });
   on("[data-tab]", e=>{ state.tab=e.currentTarget.dataset.tab; render(); });
@@ -2924,7 +3319,7 @@ function render(){
   renderNav();
   const views = {tareas:viewTareas, validaciones:viewValidaciones, maquinas:viewMaquinas,
                  maquina:viewMaquina, alta:viewAlta, repuestos:viewRepuestos,
-                 averias:viewAverias, cuadro:viewCuadro, equipo:viewEquipo};
+                 averias:viewAverias, cuadro:viewCuadro, equipo:viewEquipo, gastos:viewGastos};
   if(state.view==="alta" && !state.alta) altaInit();
   $("#view").innerHTML = (views[state.view] || viewTareas)();
   bindView();
