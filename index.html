@@ -723,16 +723,19 @@ let RECUP = null;
   const h = String(location.hash || "").replace(/^#/, "");
   if(!h || h.indexOf("=") < 0) return;
   let p; try{ p = new URLSearchParams(h); }catch(e){ return; }
-  const esRecup = p.get("type") === "recovery" && p.get("access_token");
+  const tipo = p.get("type");
+  // "recovery" es el enlace de contraseña olvidada; "invite" el de invitación
+  // a alguien recién dado de alta. Los dos acaban en la misma pantalla.
+  const esRecup = (tipo === "recovery" || tipo === "invite") && p.get("access_token");
   const hayErr  = p.get("error") || p.get("error_code");
   if(!esRecup && !hayErr) return;
   if(esRecup){
     guardaSes({access_token: p.get("access_token"), refresh_token: p.get("refresh_token") || "",
                token_type: p.get("token_type") || "bearer", expires_in: +(p.get("expires_in") || 3600)});
-    RECUP = {ok:true};
+    RECUP = {ok:true, invitado: tipo === "invite"};
   } else {
     RECUP = {error: (p.get("error_code") === "otp_expired")
-      ? "Ese enlace ya no vale: solo sirve una vez y caduca a la hora. Pide otro."
+      ? "Ese enlace ya no vale: solo sirve una vez y caduca. Pide que te manden otro, o usa «He olvidado mi contraseña»."
       : (p.get("error_description") || "El enlace no es válido. Pide otro correo.")};
   }
   try{ history.replaceState(null, "", location.pathname + location.search); }
@@ -853,6 +856,65 @@ async function cargarEstado(){
     DB.responsables = Array.from(new Set(de.concat(DB.personas.map(p=>p.n)))).filter(Boolean);
   }
 }
+/* ══════════════ REFRESCO AUTOMÁTICO ══════════════
+   La aplicación leía el estado una sola vez, al entrar. Si Salva cambiaba
+   el plan, Robert no lo veía hasta recargar la página a mano.
+   Ahora se comprueba cada poco si alguien ha guardado, y también al volver
+   a la pestaña, que es cuando de verdad se nota. La comprobación es
+   diminuta: pide solo el número de versión, no los datos. */
+const CADA_CUANTO_MIRA = 30000;      // 30 segundos
+let VIGIA = null, ULT_GASTO = null, REFRESCANDO = false;
+
+/* No se refresca mientras haya algo a medias: un parte abierto, una tarea
+   sin guardar, una factura sin registrar. Machacarle los datos a alguien
+   que está escribiendo es peor que enseñarle algo desactualizado. */
+function ocupado(){
+  return SAVING || document.hidden
+      || !!(state.modal || state.draft || state.td || state.gasto || state.imp)
+      || state.view === "alta";
+}
+
+async function miraSiHayCambios(silencioso){
+  if(!SES || !SES.access_token || !PERFIL) return;
+  if(REFRESCANDO || ocupado()) return;
+  REFRESCANDO = true;
+  try{
+    const r = await rest("/rest/v1/estado?id=eq.1&select=version,actualizado_por", {headers:H()});
+    let cambioEstado = false, quien = "";
+    if(r.ok){
+      const j = await r.json();
+      if(j.length && +j[0].version !== VER){ cambioEstado = true; quien = j[0].actualizado_por || ""; }
+    }
+    let cambioGastos = false;
+    if(GASTOS_OK){
+      const g = await rest("/rest/v1/gastos?select=id&order=id.desc&limit=1", {headers:H()});
+      if(g.ok){
+        const k = await g.json();
+        const ultimo = k.length ? k[0].id : 0;
+        if(ULT_GASTO !== null && ultimo !== ULT_GASTO) cambioGastos = true;
+        ULT_GASTO = ultimo;
+      }
+    }
+    if(!cambioEstado && !cambioGastos) return;
+    if(ocupado()) return;                       // por si ha abierto algo mientras se preguntaba
+    if(cambioEstado) await cargarEstado();
+    if(cambioGastos || cambioEstado) await cargarGastos();
+    /* Si la máquina que tenía abierta ya no existe, se vuelve al listado. */
+    if(state.mid && !byId(state.mid)){ state.mid = null; state.view = "maquinas"; }
+    render();
+    if(!silencioso) toast(quien ? "Actualizado con los últimos cambios de " + quien + "." : "Pantalla actualizada con los últimos cambios.");
+  }catch(e){ /* sin conexión: se vuelve a intentar en el siguiente vistazo */ }
+  finally{ REFRESCANDO = false; }
+}
+
+function arrancaVigia(){
+  if(VIGIA) clearInterval(VIGIA);
+  VIGIA = setInterval(()=>miraSiHayCambios(false), CADA_CUANTO_MIRA);
+  /* Al volver a la pestaña se mira ya, sin esperar al reloj. */
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) miraSiHayCambios(false); });
+  window.addEventListener("online", ()=>miraSiHayCambios(false));
+}
+
 async function guardar(msg){
   if(SAVING) return false;
   if(!CAN){ toast("Tu usuario solo puede consultar, no editar."); return false; }
@@ -1105,10 +1167,10 @@ function pantallaOlvido(err, enviadoA, valor){
   document.getElementById("o_atras").onclick = volverDelOlvido;
 }
 
-function pantallaNueva(err){
+function pantallaNueva(err, invitado){
   gate(`<div class="gatebox">${marca}
-    <h1>Elige tu contraseña</h1>
-    <p class="lead">Escríbela dos veces. Mínimo 8 caracteres. En cuanto la guardes entras directamente, sin volver a la pantalla de acceso.</p>
+    <h1>${invitado ? "Bienvenido. Elige tu contraseña" : "Elige tu contraseña"}</h1>
+    <p class="lead">${invitado ? "Es la primera vez que entras, así que la contraseña la pones tú y no la sabe nadie más. " : ""}Escríbela dos veces. Mínimo 8 caracteres. En cuanto la guardes entras directamente, sin volver a la pantalla de acceso.</p>
     ${err?`<div class="gateerr">${esc(err)}</div>`:""}
     <div class="field"><label for="n_p1">Contraseña nueva</label><input type="password" id="n_p1" autocomplete="new-password"></div>
     <div class="field"><label for="n_p2">Repítela</label><input type="password" id="n_p2" autocomplete="new-password"></div>
@@ -1116,11 +1178,11 @@ function pantallaNueva(err){
   </div>`);
   const go = async () => {
     const p1 = document.getElementById("n_p1").value, p2 = document.getElementById("n_p2").value;
-    if(p1.length < 8){ pantallaNueva("La contraseña tiene que tener 8 caracteres como mínimo."); return; }
-    if(p1 !== p2){ pantallaNueva("Las dos contraseñas no coinciden."); return; }
+    if(p1.length < 8){ pantallaNueva("La contraseña tiene que tener 8 caracteres como mínimo.", invitado); return; }
+    if(p1 !== p2){ pantallaNueva("Las dos contraseñas no coinciden.", invitado); return; }
     const b = document.getElementById("n_ok"); b.disabled = true; b.textContent = "Guardando…";
     try{ await fijarPass(p1); boot(); }
-    catch(e){ pantallaNueva(e.message); }
+    catch(e){ pantallaNueva(e.message, invitado); }
   };
   document.getElementById("n_ok").onclick = go;
   document.getElementById("n_p2").onkeydown = e => { if(e.key==="Enter") go(); };
@@ -1139,7 +1201,7 @@ function pintarUsuario(){
 async function boot(){
   if(!CFG || !CFG.url || !CFG.key){ pantallaConfig(); return; }
   if(RECUP && RECUP.error){ const msg = RECUP.error; RECUP = null; pantallaOlvido(msg); return; }
-  if(RECUP && RECUP.ok){ RECUP = null; pantallaNueva(); return; }
+  if(RECUP && RECUP.ok){ const inv = RECUP.invitado; RECUP = null; pantallaNueva(null, inv); return; }
   if(!SES || !SES.access_token){ pantallaLogin(); return; }
   try{
     PERFIL = await cargarPerfil();
@@ -1163,6 +1225,8 @@ async function boot(){
   setSync("ok","Guardado");
   pintarUsuario();
   render();
+  ULT_GASTO = GASTOS.length ? GASTOS[0].id : 0;
+  arrancaVigia();
 }
 
 /* ══════════════ ESTADO ══════════════ */
@@ -2884,6 +2948,7 @@ function bindModal(){
       });
 
       await cargarGastos();
+      ULT_GASTO = GASTOS.length ? GASTOS[0].id : 0;
       close(); render();
       if(sumadas) await guardar("Gasto registrado. Stock actualizado en " + sumadas + " " + (sumadas===1?"repuesto.":"repuestos."));
       else toast("Gasto registrado.");
@@ -3141,7 +3206,7 @@ function bindView(){
   on("[data-delgasto]", async e=>{
     const id = e.currentTarget.dataset.delgasto;
     if(!confirm("Se va a quitar esta factura y su reparto.\n\nEl stock que sumó NO se descuenta: si hace falta, corrígelo a mano.\n\n¿Seguir?")) return;
-    if(await quitarGasto(id)){ await cargarGastos(); render(); toast("Factura quitada."); }
+    if(await quitarGasto(id)){ await cargarGastos(); ULT_GASTO = GASTOS.length ? GASTOS[0].id : 0; render(); toast("Factura quitada."); }
     else toast("No se ha podido quitar. Solo puede hacerlo quien maneja el plan.");
   });
   on("[data-import]", ()=>{ const f=v.querySelector("#impfile"); if(f) f.click(); });
